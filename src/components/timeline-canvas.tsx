@@ -1,11 +1,24 @@
 'use client'
 
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import type { EvidenceCardData, ConnectionData, InteractionMode, EdgeType, NodeShape } from '@/lib/types';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle
+} from 'react';
+
+import type {
+  EvidenceCardData,
+  ConnectionData,
+  InteractionMode,
+  EdgeType,
+  NodeShape
+} from '@/lib/types';
+
 import { EvidenceCard } from './evidence-card';
 import { ConnectionLine } from './connection-line';
 import { LeftToolbar } from './left-toolbar';
-import { cn } from '@/lib/utils';
 
 interface TimelineCanvasProps {
   cards: EvidenceCardData[];
@@ -15,37 +28,40 @@ interface TimelineCanvasProps {
   dispatch: React.Dispatch<any>;
 }
 
-export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
+export const TimelineCanvas = forwardRef<any, TimelineCanvasProps>(({
   cards,
   connections,
   mode,
   selectedCardIds,
   dispatch,
 }, ref) => {
+
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
-  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number; } | null>(null);
-  const startPanPoint = useRef({ x: 0, y: 0 });
+
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  useImperativeHandle(ref, () => canvasContainerRef.current as HTMLDivElement);
-  
+  const canvasContentRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    container: canvasContainerRef.current,
+    content: canvasContentRef.current
+  }));
+
   const [edgeType, setEdgeType] = useState<EdgeType>("orthogonal");
   const [nodeShape, setNodeShape] = useState<NodeShape>("rectangle");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Control') {
-        setIsCtrlPressed(true);
-      }
+      if (e.key === 'Control') setIsCtrlPressed(true);
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control') {
-        setIsCtrlPressed(false);
-      }
+      if (e.key === 'Control') setIsCtrlPressed(false);
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
@@ -60,105 +76,11 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
     setView(v => ({ ...v, zoom: clampedZoom }));
   };
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.ctrlKey)) { // Middle mouse button or Ctrl+Click
-      setIsPanning(true);
-      startPanPoint.current = { x: e.clientX - view.x, y: e.clientY - view.y };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } else if (e.button === 0 && mode === 'select' && e.target === canvasContainerRef.current) {
-      setSelectionRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (isPanning) {
-      const newX = e.clientX - startPanPoint.current.x;
-      const newY = e.clientY - startPanPoint.current.y;
-      setView(v => ({ ...v, x: newX, y: newY }));
-    } else if (selectionRect) {
-        const newWidth = e.clientX - selectionRect.x;
-        const newHeight = e.clientY - selectionRect.y;
-        setSelectionRect(rect => rect ? {...rect, width: newWidth, height: newHeight } : null);
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (isPanning) {
-        if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-        }
-        setIsPanning(false);
-    }
-    if (selectionRect && canvasContainerRef.current) {
-        const canvasRect = canvasContainerRef.current.getBoundingClientRect();
-        const rect = {
-            x: Math.min(selectionRect.x, selectionRect.x + selectionRect.width) - canvasRect.left,
-            y: Math.min(selectionRect.y, selectionRect.y + selectionRect.height) - canvasRect.top,
-            width: Math.abs(selectionRect.width),
-            height: Math.abs(selectionRect.height)
-        };
-        
-        const idsInRect = new Set<string>();
-        cards.forEach(card => {
-            const cardX = (card.position.x * view.zoom) + view.x;
-            const cardY = (card.position.y * view.zoom) + view.y;
-            const cardWidth = card.width * view.zoom;
-            const cardHeight = card.height * view.zoom;
-
-            if (cardX < rect.x + rect.width && cardX + cardWidth > rect.x &&
-                cardY < rect.y + rect.height && cardY + cardHeight > rect.y) {
-                idsInRect.add(card.id);
-            }
-        });
-        
-        if (e.shiftKey) {
-            dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set([...selectedCardIds, ...idsInRect])});
-        } else {
-            dispatch({ type: 'SET_SELECTED_CARDS', payload: idsInRect });
-        }
-        
-        setSelectionRect(null);
-    }
-  };
-  
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    // Check if the click target is the canvas itself or the content container, but not a card or other interactive element
-    const target = e.target as HTMLElement;
-    if (target.hasAttribute('data-canvas-content') || target === canvasContainerRef.current) {
-        dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set() });
-    }
-  }
-
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    if (e.target === canvasContainerRef.current) {
-        dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set(cards.map(c => c.id)) });
-    }
-  }
-
-  useEffect(() => {
-    const el = canvasContainerRef.current;
-    if (el) {
-      if (isPanning) {
-        el.style.cursor = 'grabbing';
-      } else if (isCtrlPressed) {
-        el.style.cursor = 'grab';
-      } else {
-        el.style.cursor = 'default';
-      }
-    }
-  }, [isPanning, isCtrlPressed]);
-
-
   return (
     <div
       ref={canvasContainerRef}
       className="w-full h-full overflow-hidden absolute top-0 left-0 dotted-grid"
       onWheel={handleWheel}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onClick={handleCanvasClick}
-      onDoubleClick={handleDoubleClick}
       style={{
         backgroundSize: `${32 * view.zoom}px ${32 * view.zoom}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
@@ -170,10 +92,15 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
         edgeType={edgeType}
         setEdgeType={setEdgeType}
       />
+
       <div
+        ref={canvasContentRef}
         data-canvas-content="true"
         className="absolute top-0 left-0"
-        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`, transformOrigin: 'top left' }}
+        style={{
+          transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
+          transformOrigin: 'top left'
+        }}
       >
         {connections.map(conn => (
           <ConnectionLine
@@ -187,6 +114,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
             edgeType={edgeType}
           />
         ))}
+
         {cards.map(card => (
           <EvidenceCard
             key={card.id}
@@ -200,17 +128,6 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
           />
         ))}
       </div>
-       {selectionRect && (
-        <div
-          className="absolute border-2 border-dashed border-ring/70 bg-ring/20 pointer-events-none"
-          style={{
-            left: Math.min(selectionRect.x, selectionRect.x + selectionRect.width),
-            top: Math.min(selectionRect.y, selectionRect.y + selectionRect.height),
-            width: Math.abs(selectionRect.width),
-            height: Math.abs(selectionRect.height)
-          }}
-        />
-      )}
     </div>
   );
 });
