@@ -103,28 +103,28 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     >
       <div
         className={cn(
-          'w-full h-full p-5 flex flex-col gap-3 rounded-3xl transition-all duration-200 shadow-xl hover:shadow-2xl bg-white/70 backdrop-blur-md border-2',
+          'w-full h-full p-5 flex flex-col gap-4 rounded-3xl transition-all duration-200 shadow-xl hover:shadow-2xl bg-card/70 backdrop-blur-md border',
           isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-0'
         )}
         style={{ borderColor: card.accent }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-4">
           <div
-            className="flex-shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-white font-bold text-lg shadow-md"
+            className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full text-white font-bold text-lg shadow-md"
             style={{ backgroundColor: card.accent }}
           >
             {card.sequence}
           </div>
           <div className="flex-grow">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <h3 className="font-bold text-foreground text-lg leading-tight">{card.title}</h3>
+             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-1">
               {card.label} &bull; {card.date}
             </p>
-            <h3 className="font-bold text-slate-800 text-base leading-tight mt-0.5">{card.title}</h3>
-            <p className="text-xs text-slate-500 mt-1">Fonte: {card.source}</p>
+            <p className="text-xs text-muted-foreground mt-1">Fonte: {card.source}</p>
           </div>
         </div>
         
-        <div className="text-sm text-slate-700 leading-snug flex-grow">
+        <div className="text-sm text-foreground/80 leading-snug flex-grow">
             <p>{card.content}</p>
         </div>
 
