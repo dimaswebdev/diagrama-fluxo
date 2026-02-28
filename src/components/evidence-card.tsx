@@ -2,9 +2,10 @@
 
 import React, { useRef, useState } from 'react';
 import type { EvidenceCardData, InteractionMode } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
+import { getContrast } from 'polished';
 
 interface EvidenceCardProps {
   card: EvidenceCardData;
@@ -73,7 +74,6 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     }
   };
 
-  // Attach listeners to the window to handle dragging outside the card
   React.useEffect(() => {
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove as any);
@@ -84,6 +84,8 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  const textColor = getContrast(card.accent, '#FFF') < 3.5 ? '#000' : '#FFF';
 
   return (
     <div
@@ -100,27 +102,32 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     >
       <Card
         className={cn(
-          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/60 backdrop-blur-xl border-white/20',
-          isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : 'ring-0',
+          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/45 backdrop-blur-xl border-t-4',
+          isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-0',
           isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab',
           mode === 'connect' && 'cursor-crosshair'
         )}
+        style={{ borderTopColor: card.accent }}
       >
-        <CardHeader className="flex-shrink-0">
-          <div className='flex justify-between items-start'>
-            <CardTitle className="text-lg">{card.title}</CardTitle>
-            <Badge variant="secondary" className="font-mono text-base">{card.sequence}</Badge>
+        <CardHeader className="flex-shrink-0 pb-2">
+          <div className='flex justify-between items-center'>
+            <Badge style={{ backgroundColor: card.accent, color: textColor }} className="font-bold shadow-sm border-none">{card.label}</Badge>
+            <span className="text-xs text-muted-foreground font-mono">{card.date}</span>
           </div>
-          {card.summary && <CardDescription className='pt-2 text-xs italic'>Resumo: {card.summary}</CardDescription>}
+          <CardTitle className="text-base pt-2">{card.title}</CardTitle>
+          {card.summary && <CardDescription className='pt-1 text-xs italic'>Resumo: {card.summary}</CardDescription>}
         </CardHeader>
-        <CardContent className="flex-grow text-sm overflow-auto">
+        <CardContent className="flex-grow text-sm overflow-auto py-2">
           <p>{card.content}</p>
           {card.tags && card.tags.length > 0 && (
-             <div className="mt-4 flex flex-wrap gap-2">
-                {card.tags.map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
+             <div className="mt-2 flex flex-wrap gap-1">
+                {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
              </div>
           )}
         </CardContent>
+        <CardFooter className="flex-shrink-0 pt-0 pb-3 px-6">
+            <p className="text-xs text-muted-foreground italic w-full truncate">Fonte: {card.source}</p>
+        </CardFooter>
       </Card>
     </div>
   );

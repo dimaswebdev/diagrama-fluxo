@@ -28,6 +28,10 @@ export function EditCardDialog({ card, onSave, onClose }: EditCardDialogProps) {
   const [content, setContent] = useState(card.content);
   const [summary, setSummary] = useState(card.summary || '');
   const [tags, setTags] = useState(card.tags?.join(', ') || '');
+  const [label, setLabel] = useState(card.label);
+  const [date, setDate] = useState(card.date);
+  const [source, setSource] = useState(card.source);
+
 
   const [isSummaryPending, startSummaryTransition] = useTransition();
   const [isTagsPending, startTagsTransition] = useTransition();
@@ -37,6 +41,9 @@ export function EditCardDialog({ card, onSave, onClose }: EditCardDialogProps) {
     setContent(card.content);
     setSummary(card.summary || '');
     setTags(card.tags?.join(', ') || '');
+    setLabel(card.label);
+    setDate(card.date);
+    setSource(card.source);
   }, [card]);
 
   const handleSave = () => {
@@ -46,6 +53,9 @@ export function EditCardDialog({ card, onSave, onClose }: EditCardDialogProps) {
       content,
       summary,
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      label,
+      date,
+      source,
     });
     onClose();
   };
@@ -70,18 +80,36 @@ export function EditCardDialog({ card, onSave, onClose }: EditCardDialogProps) {
         <DialogHeader>
           <DialogTitle>Editar Evidência #{card.sequence}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="title" className="text-right">
               Título
             </Label>
             <Input id="title" value={title} onChange={e => setTitle(e.target.value)} className="col-span-3" />
           </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="date" className="text-right">
+              Data
+            </Label>
+            <Input id="date" value={date} onChange={e => setDate(e.target.value)} className="col-span-1" />
+            <Label htmlFor="label" className="text-right col-start-3">
+              Label
+            </Label>
+            <Input id="label" value={label} onChange={e => setLabel(e.target.value)} className="col-span-1" />
+          </div>
+
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="content" className="text-right pt-2">
               Conteúdo
             </Label>
             <Textarea id="content" value={content} onChange={e => setContent(e.target.value)} className="col-span-3 min-h-[120px]" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="source" className="text-right">
+              Fonte
+            </Label>
+            <Input id="source" value={source} onChange={e => setSource(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="summary" className="text-right pt-2">

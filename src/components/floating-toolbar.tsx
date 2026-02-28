@@ -58,7 +58,7 @@ export function FloatingToolbar({
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-10">
       <TooltipProvider>
-        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-card/70 backdrop-blur-xl border border-white/20 shadow-lg">
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-card/45 backdrop-blur-xl border border-white/20 shadow-lg">
           {tools.map((tool) => (
             <Tooltip key={tool.id}>
               <TooltipTrigger asChild>
@@ -68,7 +68,7 @@ export function FloatingToolbar({
                   onClick={tool.onClick}
                   className={cn(
                     'h-9 w-9',
-                    mode === tool.id && 'bg-primary/20 text-primary-foreground'
+                    mode === tool.id && 'bg-primary/20 text-primary'
                   )}
                 >
                   <tool.icon className="h-5 w-5" />

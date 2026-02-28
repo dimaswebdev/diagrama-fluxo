@@ -8,6 +8,10 @@ export interface EvidenceCardData {
   content: string;
   summary?: string;
   tags?: string[];
+  label: string;
+  date: string;
+  source: string;
+  accent: string;
 }
 
 export interface ConnectionData {

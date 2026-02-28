@@ -50,12 +50,12 @@ export function ConnectionLine({ fromCard, toCard, zoom }: ConnectionLineProps) 
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--ring))" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" />
         </marker>
       </defs>
       <path
         d={pathData}
-        stroke="hsl(var(--ring))"
+        stroke="hsl(var(--primary))"
         strokeWidth={2 / zoom}
         fill="none"
         markerEnd="url(#arrow)"
