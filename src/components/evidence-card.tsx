@@ -100,7 +100,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     >
       <Card
         className={cn(
-          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/45 backdrop-blur-2xl border-white/20',
+          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/60 backdrop-blur-xl border-white/20',
           isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : 'ring-0',
           isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab',
           mode === 'connect' && 'cursor-crosshair'
