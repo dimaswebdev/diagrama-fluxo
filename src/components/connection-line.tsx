@@ -125,24 +125,22 @@ export function ConnectionLine({
         if (isHorizontal) {
           const midX = from.x + dx / 2;
       
-          // comprimento dos segmentos
           const seg1 = Math.abs(midX - from.x);
           const seg2 = Math.abs(to.y - from.y);
       
-          // limitar raio para nunca ultrapassar segmento
           const r = Math.min(20, seg1 / 2, seg2 / 2);
       
-          // direção vertical determina sweep
-          const sweep = dy > 0 ? 1 : 0;
+          const sweep1 = dy > 0 ? 1 : 0;
+          const sweep2 = sweep1 === 1 ? 0 : 1;
       
           const yDir = dy > 0 ? 1 : -1;
       
           return `
             M ${from.x},${from.y}
             L ${midX - r},${from.y}
-            A ${r},${r} 0 0 ${sweep} ${midX},${from.y + r * yDir}
+            A ${r},${r} 0 0 ${sweep1} ${midX},${from.y + r * yDir}
             L ${midX},${to.y - r * yDir}
-            A ${r},${r} 0 0 ${sweep} ${midX + r},${to.y}
+            A ${r},${r} 0 0 ${sweep2} ${midX + r},${to.y}
             L ${to.x},${to.y}
           `;
         } else {
@@ -153,16 +151,17 @@ export function ConnectionLine({
       
           const r = Math.min(20, seg1 / 2, seg2 / 2);
       
-          const sweep = dx > 0 ? 1 : 0;
+          const sweep1 = dx > 0 ? 1 : 0;
+          const sweep2 = sweep1 === 1 ? 0 : 1;
       
           const xDir = dx > 0 ? 1 : -1;
       
           return `
             M ${from.x},${from.y}
             L ${from.x},${midY - r}
-            A ${r},${r} 0 0 ${sweep} ${from.x + r * xDir},${midY}
+            A ${r},${r} 0 0 ${sweep1} ${from.x + r * xDir},${midY}
             L ${to.x - r * xDir},${midY}
-            A ${r},${r} 0 0 ${sweep} ${to.x},${midY + r}
+            A ${r},${r} 0 0 ${sweep2} ${to.x},${midY + r}
             L ${to.x},${to.y}
           `;
         }
