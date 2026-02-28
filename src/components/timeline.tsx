@@ -164,7 +164,6 @@ function timelineReducer(state: TimelineState, action: TimelineAction): Timeline
         const fromId = Array.from(state.selectedCardIds)[0];
         if (!fromId || fromId === action.payload) return { ...state, selectedCardIds: new Set() };
 
-        // Prevent duplicate connections
         const connectionExists = state.connections.some(
             (conn) =>
                 (conn.from === fromId && conn.to === action.payload) ||
@@ -187,14 +186,69 @@ function timelineReducer(state: TimelineState, action: TimelineAction): Timeline
   }
 }
 
+type HistoryState = {
+    past: TimelineState[];
+    present: TimelineState;
+    future: TimelineState[];
+};
+
+type HistoryAction = TimelineAction | { type: 'UNDO' } | { type: 'REDO' };
+
+function historyReducer(state: HistoryState, action: HistoryAction) {
+  const { past, present, future } = state;
+
+  switch (action.type) {
+    case 'UNDO': {
+      if (past.length === 0) return state;
+      const previous = past[past.length - 1];
+      const newPast = past.slice(0, past.length - 1);
+      return {
+        past: newPast,
+        present: previous,
+        future: [present, ...future],
+      };
+    }
+    case 'REDO': {
+      if (future.length === 0) return state;
+      const next = future[0];
+      const newFuture = future.slice(1);
+      return {
+        past: [...past, present],
+        present: next,
+        future: newFuture,
+      };
+    }
+    default: {
+      const newPresent = timelineReducer(present, action);
+      if (present === newPresent) {
+        return state;
+      }
+      return {
+        past: [...past, present],
+        present: newPresent,
+        future: [],
+      };
+    }
+  }
+}
+
+
 export function Timeline() {
-  const [state, dispatch] = useReducer(timelineReducer, {
-    cards: initialCards,
-    connections: initialConnections,
-    selectedCardIds: new Set(),
-    mode: 'select',
-    editingCard: null,
+  const [history, dispatch] = useReducer(historyReducer, {
+    past: [],
+    present: {
+        cards: initialCards,
+        connections: initialConnections,
+        selectedCardIds: new Set(),
+        mode: 'select' as InteractionMode,
+        editingCard: null,
+    },
+    future: [],
   });
+
+  const { present: state, past, future } = history;
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
 
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -251,6 +305,17 @@ export function Timeline() {
             return;
         }
 
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            dispatch({ type: 'UNDO' });
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+            e.preventDefault();
+            dispatch({ type: 'REDO' });
+            return;
+        }
+
         switch (e.key.toLowerCase()) {
             case 'v':
                 dispatch({ type: 'SET_MODE', payload: 'select' });
@@ -284,7 +349,7 @@ export function Timeline() {
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
     };
-}, [state.selectedCardIds, state.editingCard, handleExportToPDF]);
+}, [state, handleExportToPDF]);
 
   return (
     <div className="relative w-full h-full bg-transparent">
@@ -302,6 +367,10 @@ export function Timeline() {
           }
         }}
         onExport={handleExportToPDF}
+        onUndo={() => dispatch({ type: 'UNDO' })}
+        onRedo={() => dispatch({ type: 'REDO' })}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
       <TimelineCanvas
         ref={canvasRef}

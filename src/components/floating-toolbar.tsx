@@ -7,6 +7,8 @@ import {
   Trash2,
   Type,
   Printer,
+  Undo,
+  Redo,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
@@ -22,6 +24,10 @@ interface FloatingToolbarProps {
   onDeleteCard: () => void;
   onEditCard: () => void;
   onExport: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export function FloatingToolbar({
@@ -32,6 +38,10 @@ export function FloatingToolbar({
   onDeleteCard,
   onEditCard,
   onExport,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: FloatingToolbarProps) {
   const tools = [
     {
@@ -79,6 +89,27 @@ export function FloatingToolbar({
               </TooltipContent>
             </Tooltip>
           ))}
+          <Separator orientation="vertical" className="h-6" />
+           <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} className="h-9 w-9">
+                  <Undo className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Desfazer (Ctrl+Z)</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={onRedo} disabled={!canRedo} className="h-9 w-9">
+                  <Redo className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Refazer (Ctrl+Y)</p>
+              </TooltipContent>
+            </Tooltip>
           <Separator orientation="vertical" className="h-6" />
           {actions.map((action) => (
             <Tooltip key={action.id}>
