@@ -62,4 +62,7 @@
       radial-gradient(900px 320px at 82% 60%, rgba(244, 181, 58, 0.1), transparent 60%);
     background-attachment: fixed;
   }
+  .dotted-grid {
+    background-image: radial-gradient(hsl(var(--border)) 0.5px, transparent 0.5px);
+  }
 }

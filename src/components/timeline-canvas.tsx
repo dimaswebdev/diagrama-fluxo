@@ -142,13 +142,17 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
   return (
     <div
       ref={canvasContainerRef}
-      className="w-full h-full overflow-hidden absolute top-0 left-0"
+      className="w-full h-full overflow-hidden absolute top-0 left-0 dotted-grid"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
+      style={{
+        backgroundSize: `${20 * view.zoom}px ${20 * view.zoom}px`,
+        backgroundPosition: `${view.x}px ${view.y}px`,
+      }}
     >
       <div
         data-canvas-content="true"
