@@ -120,28 +120,49 @@ export function ConnectionLine({
 
       // ------------------------------------------------------
       case "rounded-orthogonal": {
-        if (absDx > absDy) {
+        const isHorizontal = absDx > absDy;
+      
+        if (isHorizontal) {
           const midX = from.x + dx / 2;
-          const r = dynamicRadius;
-
+      
+          // comprimento dos segmentos
+          const seg1 = Math.abs(midX - from.x);
+          const seg2 = Math.abs(to.y - from.y);
+      
+          // limitar raio para nunca ultrapassar segmento
+          const r = Math.min(20, seg1 / 2, seg2 / 2);
+      
+          // direção vertical determina sweep
+          const sweep = dy > 0 ? 1 : 0;
+      
+          const yDir = dy > 0 ? 1 : -1;
+      
           return `
             M ${from.x},${from.y}
             L ${midX - r},${from.y}
-            A ${r},${r} 0 0 1 ${midX},${from.y + (dy > 0 ? r : -r)}
-            L ${midX},${to.y - (dy > 0 ? r : -r)}
-            A ${r},${r} 0 0 1 ${midX + r},${to.y}
+            A ${r},${r} 0 0 ${sweep} ${midX},${from.y + r * yDir}
+            L ${midX},${to.y - r * yDir}
+            A ${r},${r} 0 0 ${sweep} ${midX + r},${to.y}
             L ${to.x},${to.y}
           `;
         } else {
           const midY = from.y + dy / 2;
-          const r = dynamicRadius;
-
+      
+          const seg1 = Math.abs(midY - from.y);
+          const seg2 = Math.abs(to.x - from.x);
+      
+          const r = Math.min(20, seg1 / 2, seg2 / 2);
+      
+          const sweep = dx > 0 ? 1 : 0;
+      
+          const xDir = dx > 0 ? 1 : -1;
+      
           return `
             M ${from.x},${from.y}
             L ${from.x},${midY - r}
-            A ${r},${r} 0 0 1 ${from.x + (dx > 0 ? r : -r)},${midY}
-            L ${to.x - (dx > 0 ? r : -r)},${midY}
-            A ${r},${r} 0 0 1 ${to.x},${midY + r}
+            A ${r},${r} 0 0 ${sweep} ${from.x + r * xDir},${midY}
+            L ${to.x - r * xDir},${midY}
+            A ${r},${r} 0 0 ${sweep} ${to.x},${midY + r}
             L ${to.x},${to.y}
           `;
         }
