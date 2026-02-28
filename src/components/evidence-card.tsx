@@ -2,10 +2,8 @@
 
 import React, { useRef, useState } from 'react';
 import type { EvidenceCardData, InteractionMode } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
-import { getContrast } from 'polished';
 
 interface EvidenceCardProps {
   card: EvidenceCardData;
@@ -85,11 +83,14 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const textColor = getContrast(card.accent, '#FFF') < 3.5 ? '#000' : '#FFF';
 
   return (
     <div
-      className="absolute"
+      className={cn(
+        'absolute transition-all duration-200',
+        isDragging ? 'cursor-grabbing z-10' : 'cursor-grab',
+        mode === 'connect' && 'cursor-crosshair'
+        )}
       style={{
         left: card.position.x,
         top: card.position.y,
@@ -100,35 +101,39 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
       onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
     >
-      <Card
+      <div
         className={cn(
-          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/45 backdrop-blur-xl border-t-4',
-          isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-0',
-          isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab',
-          mode === 'connect' && 'cursor-crosshair'
+          'w-full h-full p-5 flex flex-col gap-3 rounded-3xl transition-all duration-200 shadow-xl hover:shadow-2xl bg-white/70 backdrop-blur-md border-2',
+          isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-0'
         )}
-        style={{ borderTopColor: card.accent }}
+        style={{ borderColor: card.accent }}
       >
-        <CardHeader className="flex-shrink-0 pb-2">
-          <div className='flex justify-between items-center'>
-            <Badge style={{ backgroundColor: card.accent, color: textColor }} className="font-bold shadow-sm border-none">{card.label}</Badge>
-            <span className="text-xs text-muted-foreground font-mono">{card.date}</span>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-white font-bold text-lg shadow-md"
+            style={{ backgroundColor: card.accent }}
+          >
+            {card.sequence}
           </div>
-          <CardTitle className="text-base pt-2">{card.title}</CardTitle>
-          {card.summary && <CardDescription className='pt-1 text-xs italic'>Resumo: {card.summary}</CardDescription>}
-        </CardHeader>
-        <CardContent className="flex-grow text-sm overflow-auto py-2">
-          <p>{card.content}</p>
-          {card.tags && card.tags.length > 0 && (
-             <div className="mt-2 flex flex-wrap gap-1">
-                {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
-             </div>
-          )}
-        </CardContent>
-        <CardFooter className="flex-shrink-0 pt-0 pb-3 px-6">
-            <p className="text-xs text-muted-foreground italic w-full truncate">Fonte: {card.source}</p>
-        </CardFooter>
-      </Card>
+          <div className="flex-grow">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {card.label} &bull; {card.date}
+            </p>
+            <h3 className="font-bold text-slate-800 text-base leading-tight mt-0.5">{card.title}</h3>
+            <p className="text-xs text-slate-500 mt-1">Fonte: {card.source}</p>
+          </div>
+        </div>
+        
+        <div className="text-sm text-slate-700 leading-snug flex-grow">
+            <p>{card.content}</p>
+        </div>
+
+        {card.tags && card.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+            {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs bg-black/5 border-black/10">{tag}</Badge>)}
+            </div>
+        )}
+      </div>
     </div>
   );
 }
