@@ -58,7 +58,7 @@ export function FloatingToolbar({
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-10">
       <TooltipProvider>
-        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-card/45 backdrop-blur-xl border border-white/20 shadow-lg">
+        <div className="flex items-center gap-2 p-1.5 rounded-xl bg-card/45 backdrop-blur-xl border border-white/20 shadow-lg">
           {tools.map((tool) => (
             <Tooltip key={tool.id}>
               <TooltipTrigger asChild>

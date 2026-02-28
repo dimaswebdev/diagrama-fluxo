@@ -169,6 +169,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
             fromCard={cards.find(c => c.id === conn.from)}
             toCard={cards.find(c => c.id === conn.to)}
             zoom={view.zoom}
+            mode={mode}
           />
         ))}
         {cards.map(card => (

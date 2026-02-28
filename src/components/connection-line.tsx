@@ -1,12 +1,13 @@
-import type { EvidenceCardData } from '@/lib/types';
+import type { EvidenceCardData, InteractionMode } from '@/lib/types';
 
 interface ConnectionLineProps {
   fromCard?: EvidenceCardData;
   toCard?: EvidenceCardData;
   zoom: number;
+  mode: InteractionMode;
 }
 
-export function ConnectionLine({ fromCard, toCard, zoom }: ConnectionLineProps) {
+export function ConnectionLine({ fromCard, toCard, zoom, mode }: ConnectionLineProps) {
   if (!fromCard || !toCard) {
     return null;
   }
@@ -59,6 +60,7 @@ export function ConnectionLine({ fromCard, toCard, zoom }: ConnectionLineProps) 
         strokeWidth={2 / zoom}
         fill="none"
         markerEnd="url(#arrow)"
+        strokeDasharray={mode === 'connect' ? '4 4' : 'none'}
       />
     </svg>
   );
