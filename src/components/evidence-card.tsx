@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import type { EvidenceCardData, InteractionMode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
@@ -15,10 +15,14 @@ interface EvidenceCardProps {
 }
 
 export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, selectedCardIds }: EvidenceCardProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartPos = useRef({ x: 0, y: 0 });
+  const wasDragged = useRef(false);
 
   const handleCardClick = (e: React.MouseEvent) => {
+    if (wasDragged.current) {
+      e.stopPropagation();
+      wasDragged.current = false;
+      return;
+    }
     e.stopPropagation();
     if (mode === 'connect') {
       const fromId = Array.from(selectedCardIds)[0];
@@ -43,52 +47,55 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     dispatch({type: 'START_EDITING', payload: card.id });
   }
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Allow pan (middle mouse, ctrl+click) to bubble up to canvas
+    if (e.button === 1 || e.ctrlKey) {
+        return;
+    }
     e.stopPropagation();
-    if (mode === 'select' && e.button === 0 && !e.shiftKey && !e.ctrlKey) {
-      setIsDragging(true);
-      dragStartPos.current = {
-        x: e.clientX / viewScale - card.position.x,
-        y: e.clientY / viewScale - card.position.y,
-      };
-      document.body.style.cursor = 'grabbing';
+
+    if (mode === 'select' && e.button === 0) {
+      wasDragged.current = false; // Reset drag flag
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      const delta = {
-        x: (e.clientX / viewScale) - dragStartPos.current.x - card.position.x,
-        y: (e.clientY / viewScale) - dragStartPos.current.y - card.position.y,
-      };
-      dispatch({ type: 'MOVE_CARDS', payload: { cardId: card.id, delta }});
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+        return;
+    }
+
+    if (!wasDragged.current) {
+        // Start treating as a drag after moving a few pixels
+        if (e.movementX * e.movementX + e.movementY * e.movementY > 9) {
+            wasDragged.current = true;
+            document.body.style.cursor = 'grabbing';
+        }
+    }
+
+    if (wasDragged.current) {
+        const delta = {
+            x: e.movementX / viewScale,
+            y: e.movementY / viewScale,
+        };
+        dispatch({ type: 'MOVE_CARDS', payload: { cardId: card.id, delta }});
     }
   };
 
-  const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
-      document.body.style.cursor = 'default';
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        if (wasDragged.current) {
+            document.body.style.cursor = 'default';
+        }
     }
   };
-
-  React.useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove as any);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove as any);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, handleMouseMove, handleMouseUp]);
-
 
   return (
     <div
       className={cn(
-        'absolute transition-all duration-200',
-        isDragging ? 'cursor-grabbing z-10' : 'cursor-grab',
+        'absolute transition-transform duration-200',
+        'cursor-grab',
         mode === 'connect' && 'cursor-crosshair'
         )}
       style={{
@@ -96,16 +103,20 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
         top: card.position.y,
         width: card.width,
         height: card.height,
+        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
       }}
       onClick={handleCardClick}
       onDoubleClick={handleDoubleClick}
-      onMouseDown={handleMouseDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <div className="relative w-full h-full">
         {/* Glow effect */}
         <div
           className="pointer-events-none absolute -inset-2 rounded-[28px] blur-2xl"
-          style={{ background: `radial-gradient(circle at 30% 20%, ${card.accent}66, transparent 60%)` }}
+          style={{ background: `radial-gradient(circle at 30% 20%, ${card.accent}40, transparent 60%)` }}
         />
 
         {/* Main Card Container */}
@@ -138,7 +149,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
 
           {card.tags && card.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-              {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs bg-white/30 border-white/40 backdrop-blur-lg">{tag}</Badge>)}
+              {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs bg-white/10 border-white/20 backdrop-blur-lg">{tag}</Badge>)}
               </div>
           )}
         </div>

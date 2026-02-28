@@ -56,16 +56,17 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
     setView(v => ({ ...v, zoom: clampedZoom }));
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button === 1 || (e.button === 0 && e.ctrlKey)) { // Middle mouse button or Ctrl+Click
       setIsPanning(true);
       startPanPoint.current = { x: e.clientX - view.x, y: e.clientY - view.y };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } else if (e.button === 0 && mode === 'select' && e.target === canvasContainerRef.current) {
       setSelectionRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
     if (isPanning) {
       const newX = e.clientX - startPanPoint.current.x;
       const newY = e.clientY - startPanPoint.current.y;
@@ -77,8 +78,11 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
+  const handlePointerUp = (e: React.PointerEvent) => {
     if (isPanning) {
+        if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        }
         setIsPanning(false);
     }
     if (selectionRect && canvasContainerRef.current) {
@@ -144,9 +148,9 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
       ref={canvasContainerRef}
       className="w-full h-full overflow-hidden absolute top-0 left-0 dotted-grid"
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
       style={{
