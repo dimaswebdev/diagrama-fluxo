@@ -1,6 +1,11 @@
 'use client';
 
-import type { EvidenceCardData, InteractionMode, ConnectionData, EdgeType } from '@/lib/types';
+import type {
+  EvidenceCardData,
+  InteractionMode,
+  ConnectionData,
+  EdgeType
+} from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface ConnectionLineProps {
@@ -25,52 +30,178 @@ export function ConnectionLine({
 
   if (!fromCard || !toCard) return null;
 
-  const from = {
-    x: fromCard.position.x + fromCard.width / 2,
-    y: fromCard.position.y + fromCard.height / 2,
-  };
+  // ==========================================================
+  // 🧠 INTELIGÊNCIA DIRECIONAL
+  // ==========================================================
+  function getBestPortPosition(
+    fromCard: EvidenceCardData,
+    toCard: EvidenceCardData
+  ) {
+    const fromCenterX = fromCard.position.x + fromCard.width / 2;
+    const fromCenterY = fromCard.position.y + fromCard.height / 2;
 
-  const to = {
-    x: toCard.position.x + toCard.width / 2,
-    y: toCard.position.y + toCard.height / 2,
-  };
+    const toCenterX = toCard.position.x + toCard.width / 2;
+    const toCenterY = toCard.position.y + toCard.height / 2;
 
-  function getPath(type: EdgeType, from: any, to: any) {
-    const midX = from.x + (to.x - from.x) / 2;
-    const r = 20;
+    const dx = toCenterX - fromCenterX;
+    const dy = toCenterY - fromCenterY;
 
-    switch (type) {
-      case "straight":
-        return `M ${from.x},${from.y} L ${to.x},${to.y}`;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
 
-      case "orthogonal":
-        return `M ${from.x},${from.y} L ${midX},${from.y} L ${midX},${to.y} L ${to.x},${to.y}`;
+    if (absDx > absDy) {
+      if (dx > 0) {
+        return {
+          from: { x: fromCard.position.x + fromCard.width, y: fromCenterY },
+          to: { x: toCard.position.x, y: toCenterY }
+        };
+      } else {
+        return {
+          from: { x: fromCard.position.x, y: fromCenterY },
+          to: { x: toCard.position.x + toCard.width, y: toCenterY }
+        };
+      }
+    }
 
-      case "bezier":
-        return `M ${from.x},${from.y} C ${midX},${from.y} ${midX},${to.y} ${to.x},${to.y}`;
-
-      case "manhattan":
-        const offset = 80;
-        return `M ${from.x},${from.y} L ${from.x + offset},${from.y} L ${from.x + offset},${to.y} L ${to.x},${to.y}`;
-
-      case "rounded-orthogonal":
-        return `
-          M ${from.x},${from.y}
-          L ${midX - r},${from.y}
-          A ${r},${r} 0 0 1 ${midX},${from.y + r}
-          L ${midX},${to.y - r}
-          A ${r},${r} 0 0 1 ${midX + r},${to.y}
-          L ${to.x},${to.y}
-        `;
+    if (dy > 0) {
+      return {
+        from: { x: fromCenterX, y: fromCard.position.y + fromCard.height },
+        to: { x: toCenterX, y: toCard.position.y }
+      };
+    } else {
+      return {
+        from: { x: fromCenterX, y: fromCard.position.y },
+        to: { x: toCenterX, y: toCard.position.y + toCard.height }
+      };
     }
   }
 
-  const pathData = getPath(edgeType, from, to) || '';
+  const { from, to } = getBestPortPosition(fromCard, toCard);
 
-  const svgLeft = Math.min(from.x, to.x) - 50;
-  const svgTop = Math.min(from.y, to.y) - 50;
-  const svgWidth = Math.abs(from.x - to.x) + 100;
-  const svgHeight = Math.abs(from.y - to.y) + 100;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  // ==========================================================
+  // 🔥 PATH STRATEGY AVANÇADA
+  // ==========================================================
+  function getPath(type: EdgeType) {
+
+    const dynamicRadius = Math.min(30, Math.max(8, Math.min(absDx, absDy) / 3));
+    const offset = Math.max(40, Math.min(absDx, absDy));
+
+    switch (type) {
+
+      // ------------------------------------------------------
+      case "straight":
+        return `M ${from.x},${from.y} L ${to.x},${to.y}`;
+
+      // ------------------------------------------------------
+      case "orthogonal": {
+        if (absDx > absDy) {
+          const midX = from.x + dx / 2;
+          return `
+            M ${from.x},${from.y}
+            L ${midX},${from.y}
+            L ${midX},${to.y}
+            L ${to.x},${to.y}
+          `;
+        } else {
+          const midY = from.y + dy / 2;
+          return `
+            M ${from.x},${from.y}
+            L ${from.x},${midY}
+            L ${to.x},${midY}
+            L ${to.x},${to.y}
+          `;
+        }
+      }
+
+      // ------------------------------------------------------
+      case "rounded-orthogonal": {
+        if (absDx > absDy) {
+          const midX = from.x + dx / 2;
+          const r = dynamicRadius;
+
+          return `
+            M ${from.x},${from.y}
+            L ${midX - r},${from.y}
+            A ${r},${r} 0 0 1 ${midX},${from.y + (dy > 0 ? r : -r)}
+            L ${midX},${to.y - (dy > 0 ? r : -r)}
+            A ${r},${r} 0 0 1 ${midX + r},${to.y}
+            L ${to.x},${to.y}
+          `;
+        } else {
+          const midY = from.y + dy / 2;
+          const r = dynamicRadius;
+
+          return `
+            M ${from.x},${from.y}
+            L ${from.x},${midY - r}
+            A ${r},${r} 0 0 1 ${from.x + (dx > 0 ? r : -r)},${midY}
+            L ${to.x - (dx > 0 ? r : -r)},${midY}
+            A ${r},${r} 0 0 1 ${to.x},${midY + r}
+            L ${to.x},${to.y}
+          `;
+        }
+      }
+
+      // ------------------------------------------------------
+      case "bezier": {
+        const curveIntensity = 0.5;
+
+        if (absDx > absDy) {
+          const controlOffset = absDx * curveIntensity;
+          return `
+            M ${from.x},${from.y}
+            C ${from.x + controlOffset},${from.y}
+              ${to.x - controlOffset},${to.y}
+              ${to.x},${to.y}
+          `;
+        } else {
+          const controlOffset = absDy * curveIntensity;
+          return `
+            M ${from.x},${from.y}
+            C ${from.x},${from.y + controlOffset}
+              ${to.x},${to.y - controlOffset}
+              ${to.x},${to.y}
+          `;
+        }
+      }
+
+      // ------------------------------------------------------
+      case "manhattan": {
+        if (absDx > absDy) {
+          return `
+            M ${from.x},${from.y}
+            L ${from.x + offset},${from.y}
+            L ${from.x + offset},${to.y}
+            L ${to.x},${to.y}
+          `;
+        } else {
+          return `
+            M ${from.x},${from.y}
+            L ${from.x},${from.y + offset}
+            L ${to.x},${from.y + offset}
+            L ${to.x},${to.y}
+          `;
+        }
+      }
+    }
+  }
+
+  const pathData = getPath(edgeType) || '';
+
+  // ==========================================================
+  // SVG BOUNDING BOX
+  // ==========================================================
+  const padding = 80;
+
+  const svgLeft = Math.min(from.x, to.x) - padding;
+  const svgTop = Math.min(from.y, to.y) - padding;
+  const svgWidth = Math.abs(from.x - to.x) + padding * 2;
+  const svgHeight = Math.abs(from.y - to.y) + padding * 2;
 
   const handleLineClick = () => {
     if (mode === 'connect') {
@@ -81,7 +212,12 @@ export function ConnectionLine({
   return (
     <svg
       className="absolute pointer-events-none"
-      style={{ left: svgLeft, top: svgTop, width: svgWidth, height: svgHeight }}
+      style={{
+        left: svgLeft,
+        top: svgTop,
+        width: svgWidth,
+        height: svgHeight,
+      }}
       viewBox={`${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`}
     >
       <defs>
@@ -97,15 +233,21 @@ export function ConnectionLine({
           <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" />
         </marker>
       </defs>
-      {/* Hit area for clicking */}
+
+      {/* Hit area */}
       <path
         d={pathData}
         stroke="transparent"
         strokeWidth={20 / zoom}
         fill="none"
-        className={cn(mode === 'connect' ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none')}
+        className={cn(
+          mode === 'connect'
+            ? 'cursor-pointer pointer-events-auto'
+            : 'pointer-events-none'
+        )}
         onClick={handleLineClick}
       />
+
       {/* Visible line */}
       <path
         d={pathData}
