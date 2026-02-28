@@ -105,7 +105,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
         {/* Glow effect */}
         <div
           className="pointer-events-none absolute -inset-2 rounded-[28px] blur-2xl"
-          style={{ background: `radial-gradient(circle at 30% 20%, ${card.accent}, transparent 60%)` }}
+          style={{ background: `radial-gradient(circle at 30% 20%, ${card.accent}66, transparent 60%)` }}
         />
 
         {/* Main Card Container */}
