@@ -76,14 +76,43 @@ export const TimelineCanvas = forwardRef<any, TimelineCanvasProps>(({
     setView(v => ({ ...v, zoom: clampedZoom }));
   };
 
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button === 1 || (isCtrlPressed && mode === 'select')) {
+      setIsPanning(true);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      document.body.style.cursor = 'grabbing';
+    } else if (mode === 'select') {
+      dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set() });
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (isPanning) {
+      setView(v => ({ ...v, x: v.x + e.movementX, y: v.y + e.movementY }));
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (isPanning) {
+      setIsPanning(false);
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      document.body.style.cursor = 'default';
+    }
+  };
+
   return (
     <div
       ref={canvasContainerRef}
       className="w-full h-full overflow-hidden absolute top-0 left-0 dotted-grid"
       onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       style={{
         backgroundSize: `${32 * view.zoom}px ${32 * view.zoom}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
+        cursor: isPanning ? 'grabbing' : 'default',
       }}
     >
       <LeftToolbar
