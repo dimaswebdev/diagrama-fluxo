@@ -23,10 +23,30 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
 }, ref) => {
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number; } | null>(null);
   const startPanPoint = useRef({ x: 0, y: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => canvasContainerRef.current as HTMLDivElement);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setIsCtrlPressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setIsCtrlPressed(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -40,7 +60,6 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
     if (e.button === 1 || (e.button === 0 && e.ctrlKey)) { // Middle mouse button or Ctrl+Click
       setIsPanning(true);
       startPanPoint.current = { x: e.clientX - view.x, y: e.clientY - view.y };
-      (e.target as HTMLElement).style.cursor = 'grabbing';
     } else if (e.button === 0 && mode === 'select' && e.target === canvasContainerRef.current) {
       setSelectionRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
     }
@@ -61,7 +80,6 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
   const handleMouseUp = (e: React.MouseEvent) => {
     if (isPanning) {
         setIsPanning(false);
-        (e.target as HTMLElement).style.cursor = 'grab';
     }
     if (selectionRect && canvasContainerRef.current) {
         const canvasRect = canvasContainerRef.current.getBoundingClientRect();
@@ -110,9 +128,15 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (el) {
-        el.style.cursor = isPanning ? 'grabbing' : (e.ctrlKey ? 'grab' : 'default');
+      if (isPanning) {
+        el.style.cursor = 'grabbing';
+      } else if (isCtrlPressed) {
+        el.style.cursor = 'grab';
+      } else {
+        el.style.cursor = 'default';
+      }
     }
-  }, [isPanning]);
+  }, [isPanning, isCtrlPressed]);
 
 
   return (
