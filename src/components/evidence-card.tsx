@@ -22,7 +22,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
   const handleCardClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (mode === 'connect') {
-        const fromId = Array.from(selectedCardIds)[0];
+      const fromId = Array.from(selectedCardIds)[0];
         if (fromId) {
             dispatch({ type: 'END_CONNECTION', payload: card.id });
         } else {
@@ -100,7 +100,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
     >
       <Card
         className={cn(
-          'w-full h-full flex flex-col transition-all duration-200 shadow-lg hover:shadow-2xl',
+          'w-full h-full flex flex-col transition-all duration-200 shadow-xl hover:shadow-2xl rounded-2xl bg-card/45 backdrop-blur-2xl border-white/20',
           isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : 'ring-0',
           isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab',
           mode === 'connect' && 'cursor-crosshair'

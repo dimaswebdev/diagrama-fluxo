@@ -66,7 +66,7 @@ export function EditCardDialog({ card, onSave, onClose }: EditCardDialogProps) {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[625px]">
+      <DialogContent className="sm:max-w-[625px] bg-card/80 backdrop-blur-xl border-white/20">
         <DialogHeader>
           <DialogTitle>Editar Evidência #{card.sequence}</DialogTitle>
         </DialogHeader>
