@@ -150,7 +150,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
       style={{
-        backgroundSize: `${20 * view.zoom}px ${20 * view.zoom}px`,
+        backgroundSize: `${32 * view.zoom}px ${32 * view.zoom}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
       }}
     >

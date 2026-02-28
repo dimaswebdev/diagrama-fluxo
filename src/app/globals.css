@@ -58,12 +58,13 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(1100px 300px at 20% 25%, hsl(var(--accent) / 0.1), transparent 60%),
-      radial-gradient(900px 280px at 60% 20%, hsl(var(--primary) / 0.1), transparent 60%),
-      radial-gradient(900px 320px at 82% 60%, hsl(43 89% 60% / 0.1), transparent 60%);
+      radial-gradient(1100px 300px at 20% 25%, rgba(25,183,198,0.18), transparent 60%),
+      radial-gradient(900px 280px at 60% 20%, rgba(12,62,82,0.18), transparent 60%),
+      radial-gradient(900px 320px at 82% 60%, rgba(244,181,58,0.18), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
     background-attachment: fixed;
   }
   .dotted-grid {
-    background-image: radial-gradient(hsl(var(--muted-foreground) / 0.3) 0.5px, transparent 0.5px);
+    background-image: radial-gradient(circle, #e2e8f0 1.5px, transparent 1.5px);
   }
 }
