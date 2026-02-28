@@ -16,17 +16,21 @@ import type { InteractionMode } from '@/lib/types';
 
 interface FloatingToolbarProps {
   mode: InteractionMode;
+  selectedCardIds: Set<string>;
   onSetMode: (mode: InteractionMode) => void;
   onAddCard: () => void;
   onDeleteCard: () => void;
+  onEditCard: () => void;
   onExport: () => void;
 }
 
 export function FloatingToolbar({
   mode,
+  selectedCardIds,
   onSetMode,
   onAddCard,
   onDeleteCard,
+  onEditCard,
   onExport,
 }: FloatingToolbarProps) {
   const tools = [
@@ -45,10 +49,10 @@ export function FloatingToolbar({
   ];
 
   const actions = [
-    { id: 'add', icon: Plus, label: 'Novo Elemento (N)', onClick: onAddCard },
-    { id: 'delete', icon: Trash2, label: 'Deletar', onClick: onDeleteCard },
-    { id: 'edit', icon: Type, label: 'Editar Texto (T)' }, // onClick handled by double click on card
-    { id: 'print', icon: Printer, label: 'Imprimir/PDF (P)', onClick: onExport },
+    { id: 'add', icon: Plus, label: 'Novo Elemento (N)', onClick: onAddCard, disabled: false },
+    { id: 'delete', icon: Trash2, label: 'Deletar (Delete)', onClick: onDeleteCard, disabled: selectedCardIds.size === 0 },
+    { id: 'edit', icon: Type, label: 'Editar Texto (T)', onClick: onEditCard, disabled: selectedCardIds.size !== 1 },
+    { id: 'print', icon: Printer, label: 'Imprimir/PDF (P)', onClick: onExport, disabled: false },
   ];
 
   return (
@@ -84,7 +88,7 @@ export function FloatingToolbar({
                   size="icon"
                   onClick={action.onClick}
                   className="h-9 w-9"
-                  disabled={!action.onClick}
+                  disabled={action.disabled}
                 >
                   <action.icon className="h-5 w-5" />
                 </Button>

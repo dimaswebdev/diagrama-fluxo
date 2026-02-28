@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useReducer, useCallback, useRef } from 'react';
+import React, { useState, useReducer, useCallback, useRef, useEffect } from 'react';
 import type { EvidenceCardData, ConnectionData, InteractionMode } from '@/lib/types';
 import { FloatingHeader } from './floating-header';
 import { FloatingToolbar } from './floating-toolbar';
@@ -81,7 +81,9 @@ function timelineReducer(state: TimelineState, action: TimelineAction): Timeline
             sequence: index + 1,
         }));
 
-        return { ...state, cards: reindexedCards, connections: remainingConnections, selectedCardIds: new Set() };
+        const isEditingCardDeleted = state.editingCard && state.selectedCardIds.has(state.editingCard.id);
+
+        return { ...state, cards: reindexedCards, connections: remainingConnections, selectedCardIds: new Set(), editingCard: isEditingCardDeleted ? null : state.editingCard };
     }
     case 'UPDATE_CARD':
       return {
@@ -154,7 +156,11 @@ export function Timeline() {
     }
 
     try {
-        const dataUrl = await htmlToImage.toPng(contentElement as HTMLElement, { quality: 1.0, pixelRatio: 2 });
+        const dataUrl = await htmlToImage.toPng(contentElement as HTMLElement, { 
+            quality: 1.0, 
+            pixelRatio: 2,
+            backgroundColor: '#FFFFFF',
+        });
         
         const img = new Image();
         img.src = dataUrl;
@@ -182,15 +188,61 @@ export function Timeline() {
         toast({ title: 'Erro de Exportação', description: 'Não foi possível gerar o PDF.', variant: 'destructive' });
     }
   }, [toast]);
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (state.editingCard || (e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(e.target.tagName))) {
+            return;
+        }
+
+        switch (e.key.toLowerCase()) {
+            case 'v':
+                dispatch({ type: 'SET_MODE', payload: 'select' });
+                break;
+            case 'c':
+                dispatch({ type: 'SET_MODE', payload: 'connect' });
+                break;
+            case 'n':
+                dispatch({ type: 'ADD_CARD' });
+                break;
+            case 't':
+                if (state.selectedCardIds.size === 1) {
+                    const cardId = Array.from(state.selectedCardIds)[0];
+                    dispatch({ type: 'START_EDITING', payload: cardId });
+                }
+                break;
+            case 'p':
+                e.preventDefault();
+                handleExportToPDF();
+                break;
+            case 'delete':
+            case 'backspace':
+                dispatch({ type: 'DELETE_SELECTED_CARDS' });
+                break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+}, [state.selectedCardIds, state.editingCard, handleExportToPDF]);
 
   return (
     <div className="relative w-full h-full bg-transparent">
       <FloatingHeader />
       <FloatingToolbar 
         mode={state.mode}
+        selectedCardIds={state.selectedCardIds}
         onSetMode={(mode) => dispatch({ type: 'SET_MODE', payload: mode })}
         onAddCard={() => dispatch({ type: 'ADD_CARD' })}
         onDeleteCard={() => dispatch({ type: 'DELETE_SELECTED_CARDS'})}
+        onEditCard={() => {
+          if (state.selectedCardIds.size === 1) {
+            const cardId = Array.from(state.selectedCardIds)[0];
+            dispatch({ type: 'START_EDITING', payload: cardId });
+          }
+        }}
         onExport={handleExportToPDF}
       />
       <TimelineCanvas
