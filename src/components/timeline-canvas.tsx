@@ -171,6 +171,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
             mode={mode}
             dispatch={dispatch}
             viewScale={view.zoom}
+            selectedCardIds={selectedCardIds}
           />
         ))}
       </div>

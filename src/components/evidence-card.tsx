@@ -12,16 +12,17 @@ interface EvidenceCardProps {
   mode: InteractionMode;
   dispatch: React.Dispatch<any>;
   viewScale: number;
+  selectedCardIds: Set<string>;
 }
 
-export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale }: EvidenceCardProps) {
+export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, selectedCardIds }: EvidenceCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
 
   const handleCardClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (mode === 'connect') {
-        const fromId = Array.from(dispatch({type: 'GET_STATE'}).selectedCardIds)[0];
+        const fromId = Array.from(selectedCardIds)[0];
         if (fromId) {
             dispatch({ type: 'END_CONNECTION', payload: card.id });
         } else {
@@ -29,7 +30,9 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale }: Ev
         }
     } else {
         if (e.shiftKey) {
-            dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set(dispatch({type: 'GET_STATE'}).selectedCardIds.add(card.id)) });
+            const newSelectedIds = new Set(selectedCardIds);
+            newSelectedIds.add(card.id);
+            dispatch({ type: 'SET_SELECTED_CARDS', payload: newSelectedIds });
         } else {
             dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set([card.id]) });
         }
