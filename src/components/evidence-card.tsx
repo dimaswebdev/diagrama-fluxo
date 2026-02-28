@@ -138,7 +138,7 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
 
           {card.tags && card.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-              {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs bg-black/5 border-black/10">{tag}</Badge>)}
+              {card.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs bg-white/30 border-white/40 backdrop-blur-lg">{tag}</Badge>)}
               </div>
           )}
         </div>
