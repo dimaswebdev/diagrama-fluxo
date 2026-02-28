@@ -1,6 +1,6 @@
 'use client';
 
-import type { EvidenceCardData, InteractionMode, ConnectionData } from '@/lib/types';
+import type { EvidenceCardData, InteractionMode, ConnectionData, EdgeType } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface ConnectionLineProps {
@@ -10,30 +10,67 @@ interface ConnectionLineProps {
   mode: InteractionMode;
   connection: ConnectionData;
   dispatch: React.Dispatch<any>;
+  edgeType: EdgeType;
 }
 
-export function ConnectionLine({ fromCard, toCard, zoom, mode, connection, dispatch }: ConnectionLineProps) {
-  if (!fromCard || !toCard) {
-    return null;
-  }
+export function ConnectionLine({
+  fromCard,
+  toCard,
+  zoom,
+  mode,
+  connection,
+  dispatch,
+  edgeType
+}: ConnectionLineProps) {
+
+  if (!fromCard || !toCard) return null;
 
   const from = {
     x: fromCard.position.x + fromCard.width / 2,
     y: fromCard.position.y + fromCard.height / 2,
   };
+
   const to = {
     x: toCard.position.x + toCard.width / 2,
     y: toCard.position.y + toCard.height / 2,
   };
 
-  const midX = from.x + (to.x - from.x) / 2;
-  
-  const pathData = `M ${from.x},${from.y} L ${midX},${from.y} L ${midX},${to.y} L ${to.x},${to.y}`;
+  function getPath(type: EdgeType, from: any, to: any) {
+    const midX = from.x + (to.x - from.x) / 2;
+    const r = 20;
 
-  const svgLeft = Math.min(from.x, to.x) - 20;
-  const svgTop = Math.min(from.y, to.y) - 20;
-  const svgWidth = Math.abs(from.x - to.x) + 40;
-  const svgHeight = Math.abs(from.y - to.y) + 40;
+    switch (type) {
+      case "straight":
+        return `M ${from.x},${from.y} L ${to.x},${to.y}`;
+
+      case "orthogonal":
+        return `M ${from.x},${from.y} L ${midX},${from.y} L ${midX},${to.y} L ${to.x},${to.y}`;
+
+      case "bezier":
+        return `M ${from.x},${from.y} C ${midX},${from.y} ${midX},${to.y} ${to.x},${to.y}`;
+
+      case "manhattan":
+        const offset = 80;
+        return `M ${from.x},${from.y} L ${from.x + offset},${from.y} L ${from.x + offset},${to.y} L ${to.x},${to.y}`;
+
+      case "rounded-orthogonal":
+        return `
+          M ${from.x},${from.y}
+          L ${midX - r},${from.y}
+          A ${r},${r} 0 0 1 ${midX},${from.y + r}
+          L ${midX},${to.y - r}
+          A ${r},${r} 0 0 1 ${midX + r},${to.y}
+          L ${to.x},${to.y}
+        `;
+    }
+  }
+
+  const pathData = getPath(edgeType, from, to) || '';
+
+  const svgLeft = Math.min(from.x, to.x) - 50;
+  const svgTop = Math.min(from.y, to.y) - 50;
+  const svgWidth = Math.abs(from.x - to.x) + 100;
+  const svgHeight = Math.abs(from.y - to.y) + 100;
 
   const handleLineClick = () => {
     if (mode === 'connect') {
@@ -44,12 +81,7 @@ export function ConnectionLine({ fromCard, toCard, zoom, mode, connection, dispa
   return (
     <svg
       className="absolute pointer-events-none"
-      style={{
-        left: svgLeft,
-        top: svgTop,
-        width: svgWidth,
-        height: svgHeight,
-      }}
+      style={{ left: svgLeft, top: svgTop, width: svgWidth, height: svgHeight }}
       viewBox={`${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`}
     >
       <defs>

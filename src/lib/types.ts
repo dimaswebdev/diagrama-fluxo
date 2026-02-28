@@ -21,3 +21,12 @@ export interface ConnectionData {
 }
 
 export type InteractionMode = 'select' | 'connect';
+
+export type NodeShape = "rectangle" | "circle";
+
+export type EdgeType =
+  | "straight"
+  | "orthogonal"
+  | "bezier"
+  | "manhattan"
+  | "rounded-orthogonal";

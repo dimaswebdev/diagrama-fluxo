@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
-import type { EvidenceCardData, InteractionMode } from '@/lib/types';
+import type { EvidenceCardData, InteractionMode, NodeShape } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 
@@ -12,9 +12,10 @@ interface EvidenceCardProps {
   dispatch: React.Dispatch<any>;
   viewScale: number;
   selectedCardIds: Set<string>;
+  nodeShape: NodeShape;
 }
 
-export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, selectedCardIds }: EvidenceCardProps) {
+export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, selectedCardIds, nodeShape }: EvidenceCardProps) {
   const wasDragged = useRef(false);
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -136,10 +137,16 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
         {/* Main Card Container */}
         <div
           className={cn(
-            'relative w-full h-full p-5 flex flex-col gap-4 rounded-3xl border bg-white/25 shadow-[0_18px_40px_rgba(2,6,23,0.10)] backdrop-blur-2xl transition-all duration-200',
+            'relative w-full h-full p-5 flex flex-col gap-4 border bg-white/25 shadow-[0_18px_40px_rgba(2,6,23,0.10)] backdrop-blur-2xl transition-all duration-200',
+            nodeShape === "circle"
+              ? "rounded-full flex items-center justify-center text-center"
+              : "rounded-3xl",
             isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'ring-0'
           )}
-          style={{ borderColor: card.accent }}
+          style={{
+            borderColor: card.accent,
+            aspectRatio: nodeShape === "circle" ? "1 / 1" : undefined,
+          }}
         >
           <div className="flex items-start gap-4">
             <div

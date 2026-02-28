@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import type { EvidenceCardData, ConnectionData, InteractionMode } from '@/lib/types';
+import type { EvidenceCardData, ConnectionData, InteractionMode, EdgeType, NodeShape } from '@/lib/types';
 import { EvidenceCard } from './evidence-card';
 import { ConnectionLine } from './connection-line';
+import { LeftToolbar } from './left-toolbar';
 import { cn } from '@/lib/utils';
 
 interface TimelineCanvasProps {
@@ -28,6 +29,9 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
   const startPanPoint = useRef({ x: 0, y: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => canvasContainerRef.current as HTMLDivElement);
+  
+  const [edgeType, setEdgeType] = useState<EdgeType>("orthogonal");
+  const [nodeShape, setNodeShape] = useState<NodeShape>("rectangle");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -160,6 +164,12 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
         backgroundPosition: `${view.x}px ${view.y}px`,
       }}
     >
+      <LeftToolbar
+        nodeShape={nodeShape}
+        setNodeShape={setNodeShape}
+        edgeType={edgeType}
+        setEdgeType={setEdgeType}
+      />
       <div
         data-canvas-content="true"
         className="absolute top-0 left-0"
@@ -174,6 +184,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
             toCard={cards.find(c => c.id === conn.to)}
             zoom={view.zoom}
             mode={mode}
+            edgeType={edgeType}
           />
         ))}
         {cards.map(card => (
@@ -185,6 +196,7 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
             dispatch={dispatch}
             viewScale={view.zoom}
             selectedCardIds={selectedCardIds}
+            nodeShape={nodeShape}
           />
         ))}
       </div>
