@@ -63,6 +63,6 @@
     background-attachment: fixed;
   }
   .dotted-grid {
-    background-image: radial-gradient(hsl(var(--border)) 0.5px, transparent 0.5px);
+    background-image: radial-gradient(hsl(var(--muted-foreground)) 0.5px, transparent 0.5px);
   }
 }
