@@ -112,6 +112,20 @@ export function EvidenceCard({ card, isSelected, mode, dispatch, viewScale, sele
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
+      {/* Connection Ports - visible only in connect mode */}
+      {['top', 'right', 'bottom', 'left'].map(port => (
+        <div
+            key={port}
+            className={cn(
+                'absolute w-3 h-3 bg-primary/50 rounded-full border-2 border-white/80 shadow-md -translate-x-1/2 -translate-y-1/2 transition-opacity pointer-events-none',
+                mode === 'connect' ? 'opacity-100' : 'opacity-0',
+                port === 'top' && 'top-0 left-1/2',
+                port === 'bottom' && 'top-full left-1/2',
+                port === 'left' && 'top-1/2 left-0',
+                port === 'right' && 'top-1/2 left-full',
+            )}
+        />
+      ))}
       <div className="relative w-full h-full">
         {/* Glow effect */}
         <div

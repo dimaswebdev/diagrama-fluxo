@@ -1,13 +1,18 @@
-import type { EvidenceCardData, InteractionMode } from '@/lib/types';
+'use client';
+
+import type { EvidenceCardData, InteractionMode, ConnectionData } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface ConnectionLineProps {
   fromCard?: EvidenceCardData;
   toCard?: EvidenceCardData;
   zoom: number;
   mode: InteractionMode;
+  connection: ConnectionData;
+  dispatch: React.Dispatch<any>;
 }
 
-export function ConnectionLine({ fromCard, toCard, zoom, mode }: ConnectionLineProps) {
+export function ConnectionLine({ fromCard, toCard, zoom, mode, connection, dispatch }: ConnectionLineProps) {
   if (!fromCard || !toCard) {
     return null;
   }
@@ -29,6 +34,12 @@ export function ConnectionLine({ fromCard, toCard, zoom, mode }: ConnectionLineP
   const svgTop = Math.min(from.y, to.y) - 20;
   const svgWidth = Math.abs(from.x - to.x) + 40;
   const svgHeight = Math.abs(from.y - to.y) + 40;
+
+  const handleLineClick = () => {
+    if (mode === 'connect') {
+      dispatch({ type: 'DELETE_CONNECTION', payload: connection.id });
+    }
+  };
 
   return (
     <svg
@@ -54,6 +65,16 @@ export function ConnectionLine({ fromCard, toCard, zoom, mode }: ConnectionLineP
           <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" />
         </marker>
       </defs>
+      {/* Hit area for clicking */}
+      <path
+        d={pathData}
+        stroke="transparent"
+        strokeWidth={20 / zoom}
+        fill="none"
+        className={cn(mode === 'connect' ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none')}
+        onClick={handleLineClick}
+      />
+      {/* Visible line */}
       <path
         d={pathData}
         stroke="hsl(var(--primary))"
@@ -61,6 +82,7 @@ export function ConnectionLine({ fromCard, toCard, zoom, mode }: ConnectionLineP
         fill="none"
         markerEnd="url(#arrow)"
         strokeDasharray={mode === 'connect' ? '4 4' : 'none'}
+        className="pointer-events-none"
       />
     </svg>
   );

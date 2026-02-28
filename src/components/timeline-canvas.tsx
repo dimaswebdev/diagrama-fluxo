@@ -118,7 +118,9 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
   };
   
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (e.target === canvasContainerRef.current) {
+    // Check if the click target is the canvas itself or the content container, but not a card or other interactive element
+    const target = e.target as HTMLElement;
+    if (target.hasAttribute('data-canvas-content') || target === canvasContainerRef.current) {
         dispatch({ type: 'SET_SELECTED_CARDS', payload: new Set() });
     }
   }
@@ -166,6 +168,8 @@ export const TimelineCanvas = forwardRef<HTMLDivElement, TimelineCanvasProps>(({
         {connections.map(conn => (
           <ConnectionLine
             key={conn.id}
+            connection={conn}
+            dispatch={dispatch}
             fromCard={cards.find(c => c.id === conn.from)}
             toCard={cards.find(c => c.id === conn.to)}
             zoom={view.zoom}
