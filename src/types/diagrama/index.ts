@@ -28,6 +28,16 @@ export interface DiagramState {
   connections: Connection[];
 }
 
+export interface SelectionBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type ConnectionType = 'normal' | 'dashed' | 'dotted';
+export type CardType = 'default' | 'input' | 'output' | 'process' | 'decision';
+
 export const GRID_SIZE = 20;
 export const A4_WIDTH = 595;
 export const A4_HEIGHT = 842;
