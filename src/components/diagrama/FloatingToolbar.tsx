@@ -85,7 +85,23 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onZoomOut,
   onZoomReset
 }) => {
-  const colors = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#000000'];
+  const colors = [
+    '#9ED6F0',
+    '#19B7C6',
+    '#0B8CA6',
+    '#0C3E52',
+    '#F4B53A',
+    '#F39A1F',
+    '#F07B1A',
+    '#FF6B6B',
+    '#7C5CFF',
+    '#2DD4BF',
+    '#F59E0B',
+    '#60A5FA',
+    '#34D399',
+    '#A78BFA',
+    '#111827'
+  ];
 
   const cardTypes: { type: CardType; label: string; Icon: React.ElementType }[] = [
     { type: 'default', label: 'Normal', Icon: Square },
