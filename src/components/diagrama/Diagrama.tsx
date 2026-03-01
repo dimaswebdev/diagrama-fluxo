@@ -76,8 +76,10 @@ const Diagrama: React.FC = () => {
         y: centerY,
         width: 320,
         height: 220,
-  
-        title: "Novo Evento",
+      
+        sequence: 1, // 🔥 ADICIONE
+      
+        title: "Evento 1",
         content: "Descreva o conteúdo aqui.",
         summary: "",
         tags: [],
@@ -85,7 +87,7 @@ const Diagrama: React.FC = () => {
         date: new Date().toLocaleDateString("pt-BR"),
         source: "",
         accent: "#19B7C6",
-  
+      
         type: "default"
       };
   
@@ -166,7 +168,9 @@ const Diagrama: React.FC = () => {
         width: 320,
         height: 220,
       
-        title: "Novo Evento",
+        sequence: 1,
+      
+        title: "Evento 1",
         content: "Descreva o conteúdo aqui.",
         summary: "",
         tags: [],
@@ -513,6 +517,20 @@ const Diagrama: React.FC = () => {
     );
   };
 
+  const getNextSequenceNumber = (): number => {
+    const usedNumbers = cards
+      .map(card => card.sequence)
+      .sort((a, b) => a - b);
+  
+    for (let i = 1; i <= usedNumbers.length; i++) {
+      if (usedNumbers[i - 1] !== i) {
+        return i;
+      }
+    }
+  
+    return usedNumbers.length + 1;
+  };
+
   const addCard = (type: CardTypeEnum = 'default'): void => {
     saveToHistory();
   
@@ -520,6 +538,8 @@ const Diagrama: React.FC = () => {
       x: (-offset.x / scale) + (containerRef.current?.clientWidth || 0) / (2 * scale),
       y: (-offset.y / scale) + (containerRef.current?.clientHeight || 0) / (2 * scale)
     };
+
+    const nextSequence = getNextSequenceNumber();
   
     const newCard: CardType = {
       id: Date.now().toString(),
@@ -528,7 +548,9 @@ const Diagrama: React.FC = () => {
       width: 320,
       height: 220,
   
-      title: "Novo Evento",
+      sequence: nextSequence,
+      title: `Evento ${nextSequence}`,
+
       content: "Descreva o conteúdo aqui.",
       summary: "",
       tags: [],

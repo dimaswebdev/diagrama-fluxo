@@ -4,8 +4,7 @@ export interface Card {
   y: number;
   width: number;
   height: number;
-
-  // 🔥 Conteúdo estruturado (igual Timeline)
+  sequence: number;
   title: string;
   content: string;
   summary?: string;
@@ -13,12 +12,9 @@ export interface Card {
   label: string;
   date: string;
   source: string;
-
-  // 🎨 Identidade visual
   accent: string;
 
-  // 🔹 Mantém compatibilidade com sistema antigo
-  type?: 'default' | 'input' | 'output' | 'process' | 'decision';
+  type?: CardType;
 }
 
 export interface Connection {
