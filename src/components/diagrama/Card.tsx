@@ -13,51 +13,19 @@ interface CardProps {
   onConnectionEnd: (targetCardId: string) => void;
 }
 
-const Card: React.FC<CardProps> = ({ 
-  card, 
-  isSelected, 
-  onClick, 
+const Card: React.FC<CardProps> = ({
+  card,
+  isSelected,
+  onClick,
   onDragStart,
   onUpdate,
   onConnectionStart,
   onConnectionEnd
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState(card.content);
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const getCardStyles = () => {
-    const baseStyles = "absolute bg-white border rounded shadow-sm hover:shadow-md transition-all";
-    const selectedStyles = isSelected ? "ring-2 ring-blue-500 ring-offset-2" : "border-gray-200";
-    
-    const typeStyles = {
-      default: "bg-white",
-      input: "bg-blue-50 border-l-4 border-l-blue-500",
-      output: "bg-purple-50 border-l-4 border-l-purple-500",
-      process: "bg-orange-50 border-l-4 border-l-orange-500",
-      decision: "bg-yellow-50 border-l-4 border-l-yellow-500"
-    };
-
-    return `${baseStyles} ${selectedStyles} ${typeStyles[card.type || 'default']}`;
-  };
-
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditing(true);
-  };
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    onUpdate({ content });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleBlur();
-    }
-  };
+  const accent = card.accent;
 
   const handleConnectionPointMouseDown = (
     e: React.MouseEvent,
@@ -65,12 +33,12 @@ const Card: React.FC<CardProps> = ({
   ) => {
     e.stopPropagation();
     e.preventDefault();
-  
+
     const worldPoint: Point = {
       x: card.x + point.x,
       y: card.y + point.y
     };
-  
+
     onConnectionStart(worldPoint);
   };
 
@@ -90,9 +58,8 @@ const Card: React.FC<CardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={getCardStyles()}
+      className="absolute transition-all duration-200 cursor-move group"
       onClick={onClick}
-      onDoubleClick={handleDoubleClick}
       onMouseDown={onDragStart}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -101,48 +68,86 @@ const Card: React.FC<CardProps> = ({
         top: card.y,
         width: card.width,
         height: card.height,
-        zIndex: isSelected ? 20 : 10,
-        cursor: 'move'
+        zIndex: isSelected ? 20 : 10
       }}
     >
-      {isEditing ? (
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          autoFocus
-          className="w-full h-full p-2 border-none resize-none outline-none bg-transparent"
-        />
-      ) : (
-        <>
-          <div className="p-2 h-full overflow-hidden">
-            {content}
-          </div>
-          {card.type && card.type !== 'default' && (
-            <div className="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 bg-black/10 rounded">
-              {card.type}
-            </div>
-          )}
-        </>
-      )}
+      {/* Glow Premium */}
+      <div
+        className="pointer-events-none absolute -inset-2 rounded-2xl blur-2xl opacity-60"
+        style={{
+          background: `radial-gradient(circle at 30% 20%, ${accent}40, transparent 60%)`
+        }}
+      />
 
-      {/* Pontos de conexão - SEMPRE VISÍVEIS quando hover ou selecionado */}
-      {(isHovered || isSelected) && connectionPoints.map(point => (
-        <div
-          key={point.id}
-          className="absolute w-4 h-4 bg-blue-500 rounded-full cursor-crosshair hover:bg-blue-600 transition-all z-30"
-          style={{ 
-            left: point.x - 8, 
-            top: point.y - 8,
-            border: '2px solid white',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-          }}
-          onMouseDown={(e) => handleConnectionPointMouseDown(e, point)}
-          onMouseUp={handleConnectionPointMouseUp}
-          title={`Conectar ${point.id}`}
-        />
-      ))}
+      {/* Container */}
+      <div
+        className={`relative w-full h-full bg-white/95 backdrop-blur-xl border rounded-2xl shadow-[0_12px_30px_rgba(2,6,23,0.08)] p-4 flex flex-col gap-3
+        ${isSelected ? 'ring-2 ring-offset-2 ring-offset-white' : ''}`}
+        style={{ borderColor: accent }}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <div
+            className="h-8 w-8 flex items-center justify-center rounded-xl text-white text-xs font-bold"
+            style={{ backgroundColor: accent }}
+          >
+            {card.label}
+          </div>
+
+          <div className="flex-1">
+            <h3 className="font-semibold text-gray-900 text-sm">
+              {card.title}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {card.date}
+            </p>
+          </div>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="text-sm text-gray-700 flex-grow overflow-hidden">
+          {card.content}
+        </div>
+
+        {/* Fonte */}
+        {card.source && (
+          <div className="text-xs text-gray-500">
+            Fonte: {card.source}
+          </div>
+        )}
+
+        {/* Tags */}
+        {card.tags && card.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {card.tags.map(tag => (
+              <span
+                key={tag}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Pontos de Conexão Premium */}
+      {(isHovered || isSelected) &&
+        connectionPoints.map(point => (
+          <div
+            key={point.id}
+            className="absolute w-4 h-4 rounded-full cursor-crosshair transition-all z-30"
+            style={{
+              left: point.x - 8,
+              top: point.y - 8,
+              backgroundColor: accent,
+              border: '2px solid white',
+              boxShadow: `0 4px 12px ${accent}50`
+            }}
+            onMouseDown={(e) => handleConnectionPointMouseDown(e, point)}
+            onMouseUp={handleConnectionPointMouseUp}
+          />
+        ))}
     </div>
   );
 };

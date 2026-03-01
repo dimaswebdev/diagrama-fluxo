@@ -4,9 +4,21 @@ export interface Card {
   y: number;
   width: number;
   height: number;
+
+  // 🔥 Conteúdo estruturado (igual Timeline)
+  title: string;
   content: string;
+  summary?: string;
+  tags?: string[];
+  label: string;
+  date: string;
+  source: string;
+
+  // 🎨 Identidade visual
+  accent: string;
+
+  // 🔹 Mantém compatibilidade com sistema antigo
   type?: 'default' | 'input' | 'output' | 'process' | 'decision';
-  color?: string;
 }
 
 export interface Connection {

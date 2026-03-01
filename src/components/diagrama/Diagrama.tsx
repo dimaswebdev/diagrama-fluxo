@@ -64,19 +64,28 @@ const Diagrama: React.FC = () => {
 
   useEffect(() => {
     if (cards.length === 0) {
-      const centerX = (A4_WIDTH / 2) - 75;
-      const centerY = (A4_HEIGHT / 2) - 40;
-      
+      const centerX = (A4_WIDTH / 2) - 160;
+      const centerY = (A4_HEIGHT / 2) - 110;
+  
       const initialCard: CardType = {
         id: Date.now().toString(),
         x: centerX,
         y: centerY,
-        width: 150,
-        height: 80,
-        content: 'Card Inicial',
-        type: 'default'
+        width: 320,
+        height: 220,
+  
+        title: "Novo Evento",
+        content: "Descreva o conteúdo aqui.",
+        summary: "",
+        tags: [],
+        label: "INÍCIO",
+        date: new Date().toLocaleDateString("pt-BR"),
+        source: "",
+        accent: "#19B7C6",
+  
+        type: "default"
       };
-      
+  
       pushState({ cards: [initialCard], connections: [] });
       setCards([initialCard]);
       setConnections([]);
@@ -151,10 +160,19 @@ const Diagrama: React.FC = () => {
         id: Date.now().toString(),
         x: centerX,
         y: centerY,
-        width: 150,
-        height: 80,
-        content: 'Card Inicial',
-        type: 'default'
+        width: 320,
+        height: 220,
+      
+        title: "Novo Evento",
+        content: "Descreva o conteúdo aqui.",
+        summary: "",
+        tags: [],
+        label: "INÍCIO",
+        date: new Date().toLocaleDateString("pt-BR"),
+        source: "",
+        accent: "#19B7C6",
+      
+        type: "default"
       };
       
       pushState({ cards: [initialCard], connections: [] });
@@ -494,22 +512,32 @@ const Diagrama: React.FC = () => {
 
   const addCard = (type: CardTypeEnum = 'default'): void => {
     saveToHistory();
-    
+  
     const viewportCenter = {
       x: (-offset.x / scale) + (containerRef.current?.clientWidth || 0) / (2 * scale),
       y: (-offset.y / scale) + (containerRef.current?.clientHeight || 0) / (2 * scale)
     };
-
+  
     const newCard: CardType = {
       id: Date.now().toString(),
-      x: viewportCenter.x - 75,
-      y: viewportCenter.y - 40,
-      width: 150,
-      height: 80,
-      content: 'Novo Card',
+      x: viewportCenter.x - 160,
+      y: viewportCenter.y - 110,
+      width: 320,
+      height: 220,
+  
+      title: "Novo Evento",
+      content: "Descreva o conteúdo aqui.",
+      summary: "",
+      tags: [],
+      label: "NOVO",
+      date: new Date().toLocaleDateString("pt-BR"),
+      source: "",
+      accent: "#7C5CFF",
+  
       type
     };
-    setCards((prev: CardType[]) => [...prev, newCard]);
+  
+    setCards((prev) => [...prev, newCard]);
   };
 
   const updateCard = (id: string, updates: Partial<CardType>): void => {
