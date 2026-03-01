@@ -16,8 +16,8 @@ export interface Connection {
   type?: 'normal' | 'dashed' | 'dotted';
   color?: string;
   label?: string;
-  fromPoint: { x: number; y: number };
-  toPoint: { x: number; y: number };
+  fromSide: 'top' | 'right' | 'bottom' | 'left';
+  toSide: 'top' | 'right' | 'bottom' | 'left';
 }
 
 export interface Point {

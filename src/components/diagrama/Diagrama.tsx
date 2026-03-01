@@ -362,7 +362,7 @@ const Diagrama: React.FC = () => {
     setConnectionStart({ cardId, point });
   };
 
-  function calculateConnectionPoints(from: CardType, to: CardType) {
+  function calculateConnectionSides(from: CardType, to: CardType) {
     const fromCenter = {
       x: from.x + from.width / 2,
       y: from.y + from.height / 2
@@ -376,34 +376,18 @@ const Diagrama: React.FC = () => {
     const dx = toCenter.x - fromCenter.x;
     const dy = toCenter.y - fromCenter.y;
   
-    let startPoint = { ...fromCenter };
-    let endPoint = { ...toCenter };
-  
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) {
-        startPoint.x = from.x + from.width;
-        endPoint.x = to.x;
-      } else {
-        startPoint.x = from.x;
-        endPoint.x = to.x + to.width;
-      }
-      startPoint.y = fromCenter.y;
-      endPoint.y = toCenter.y;
+      return {
+        fromSide: dx > 0 ? 'right' as const : 'left' as const,
+        toSide: dx > 0 ? 'left' as const : 'right' as const
+      };
     } else {
-      if (dy > 0) {
-        startPoint.y = from.y + from.height;
-        endPoint.y = to.y;
-      } else {
-        startPoint.y = from.y;
-        endPoint.y = to.y + to.height;
-      }
-      startPoint.x = fromCenter.x;
-      endPoint.x = toCenter.x;
+      return {
+        fromSide: dy > 0 ? 'bottom' as const : 'top' as const,
+        toSide: dy > 0 ? 'top' as const : 'bottom' as const
+      };
     }
-  
-    return { startPoint, endPoint };
   }
-  
 
   const createConnection = (
     fromId: string,
@@ -417,7 +401,7 @@ const Diagrama: React.FC = () => {
   
     if (!fromCard || !toCard) return;
   
-    const { startPoint, endPoint } = calculateConnectionPoints(fromCard, toCard);
+    const { fromSide, toSide } = calculateConnectionSides(fromCard, toCard);
   
     const newConnection: Connection = {
       id: `${fromId}-${toId}-${Date.now()}`,
@@ -425,13 +409,14 @@ const Diagrama: React.FC = () => {
       toCard: toId,
       type,
       color,
-      fromPoint: startPoint,
-      toPoint: endPoint
+      fromSide,
+      toSide
     };
   
     setConnections(prev => [...prev, newConnection]);
     saveToHistory();
   };
+  
 
   const cancelConnection = (): void => {
     setIsConnecting(false);

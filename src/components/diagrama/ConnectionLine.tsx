@@ -2,6 +2,8 @@
 
 import React from 'react';
 
+type Side = 'top' | 'right' | 'bottom' | 'left';
+
 interface ConnectionLineProps {
   fromCard: { x: number; y: number; width: number; height: number };
   toCard: { x: number; y: number; width: number; height: number };
@@ -9,8 +11,8 @@ interface ConnectionLineProps {
     type?: 'normal' | 'dashed' | 'dotted';
     color?: string;
     label?: string;
-    fromPoint?: { x: number; y: number };
-    toPoint?: { x: number; y: number };
+    fromSide: Side;
+    toSide: Side;
   };
   isSelected?: boolean;
   onClick?: () => void;
@@ -24,21 +26,27 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
   onClick
 }) => {
 
-  // 🔥 Fallback seguro para conexões antigas
-  const startPoint = connection.fromPoint ?? {
-    x: fromCard.x + fromCard.width / 2,
-    y: fromCard.y + fromCard.height / 2
+  // 🔹 Calcula ponto com base no lado
+  const getPoint = (card: typeof fromCard, side: Side) => {
+    switch (side) {
+      case 'top':
+        return { x: card.x + card.width / 2, y: card.y };
+      case 'bottom':
+        return { x: card.x + card.width / 2, y: card.y + card.height };
+      case 'left':
+        return { x: card.x, y: card.y + card.height / 2 };
+      case 'right':
+        return { x: card.x + card.width, y: card.y + card.height / 2 };
+    }
   };
 
-  const endPoint = connection.toPoint ?? {
-    x: toCard.x + toCard.width / 2,
-    y: toCard.y + toCard.height / 2
-  };
+  const startPoint = getPoint(fromCard, connection.fromSide);
+  const endPoint = getPoint(toCard, connection.toSide);
 
   const midX = (startPoint.x + endPoint.x) / 2;
   const midY = (startPoint.y + endPoint.y) / 2;
 
-  // Curva Bézier suave
+  // 🔹 Curva Bézier suave
   const controlPoint1 = { x: midX, y: startPoint.y };
   const controlPoint2 = { x: midX, y: endPoint.y };
 
@@ -49,7 +57,7 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
       ${endPoint.x} ${endPoint.y}
   `;
 
-  // Cálculo do ângulo da seta
+  // 🔹 Ângulo da seta
   const dx = 3 * (endPoint.x - controlPoint2.x);
   const dy = 3 * (endPoint.y - controlPoint2.y);
   const arrowAngle = Math.atan2(dy, dx) * 180 / Math.PI;
