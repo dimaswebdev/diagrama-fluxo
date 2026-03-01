@@ -600,73 +600,89 @@ const Diagrama: React.FC = () => {
             position: 'relative'
           }}
         >
-          {/* SVG para conexões - AGORA COM Z-INDEX MAIOR QUE O FUNDO */}
-          <svg
-            className="absolute inset-0"
-            style={{
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none'
-            }}
-          >
-            {connections.map((conn: Connection) => {
-              const fromCard = cards.find((c: CardType) => c.id === conn.fromCard);
-              const toCard = cards.find((c: CardType) => c.id === conn.toCard);
+              {/* SVG GLOBAL DE CONEXÕES */}
+              <svg
+                className="absolute inset-0"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  zIndex: 5,
+                }}
+              >
+                <defs>
+                  <marker
+                    id="arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                    markerUnits="strokeWidth"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill={connectionColor} />
+                  </marker>
+                </defs>
 
-              if (!fromCard || !toCard) return null;
+                {/* Conexões existentes */}
+                {connections.map((conn: Connection) => {
+                  const fromCard = cards.find((c: CardType) => c.id === conn.fromCard);
+                  const toCard = cards.find((c: CardType) => c.id === conn.toCard);
 
-              return (
-                <ConnectionLine
-                  key={conn.id}
-                  fromCard={fromCard}
-                  toCard={toCard}
-                  connection={conn}
-                  isSelected={selectedConnections.has(conn.id)}
-                  onClick={(e?: React.MouseEvent) => {
-                    e?.stopPropagation();
+                  if (!fromCard || !toCard) return null;
 
-                    // Multi seleção com CTRL
-                    if (e?.ctrlKey || e?.metaKey) {
-                      setSelectedConnections(prev => {
-                        const updated = new Set(prev);
+                  return (
+                    <ConnectionLine
+                      key={conn.id}
+                      fromCard={fromCard}
+                      toCard={toCard}
+                      connection={conn}
+                      isSelected={selectedConnections.has(conn.id)}
+                      onClick={(e?: React.MouseEvent) => {
+                        e?.stopPropagation();
 
-                        if (updated.has(conn.id)) {
-                          updated.delete(conn.id);
+                        if (e?.ctrlKey || e?.metaKey) {
+                          setSelectedConnections(prev => {
+                            const updated = new Set(prev);
+
+                            if (updated.has(conn.id)) {
+                              updated.delete(conn.id);
+                            } else {
+                              updated.add(conn.id);
+                            }
+
+                            return updated;
+                          });
                         } else {
-                          updated.add(conn.id);
+                          setSelectedConnections(new Set([conn.id]));
+                          setSelectedCards(new Set());
                         }
+                      }}
+                    />
+                  );
+                })}
 
-                        return updated;
-                      });
-                    } else {
-                      // Seleção exclusiva
-                      setSelectedConnections(new Set([conn.id]));
-                      setSelectedCards(new Set());
+                {/* Linha temporária ao conectar */}
+                {isConnecting && connectionStart && tempConnectionEnd && (
+                  <line
+                    x1={connectionStart.point.x}
+                    y1={connectionStart.point.y}
+                    x2={tempConnectionEnd.x}
+                    y2={tempConnectionEnd.y}
+                    stroke={connectionColor}
+                    strokeWidth={2 / scale}
+                    strokeDasharray={
+                      connectionType === 'dashed'
+                        ? '6,4'
+                        : connectionType === 'dotted'
+                        ? '2,4'
+                        : undefined
                     }
-                  }}
-                />
-              );
-            })}
-
-            {/* LINHA TEMPORÁRIA CORRIGIDA */}
-            {isConnecting && connectionStart && tempConnectionEnd && (
-              <line
-                x1={connectionStart.point.x}
-                y1={connectionStart.point.y}
-                x2={tempConnectionEnd.x}
-                y2={tempConnectionEnd.y}
-                stroke={connectionColor}
-                strokeWidth="2"
-                strokeDasharray={
-                  connectionType === 'dashed'
-                    ? '6,4'
-                    : connectionType === 'dotted'
-                    ? '2,4'
-                    : undefined
-                }
-              />
-            )}
-          </svg>
+                    markerEnd="url(#arrow)"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
+              </svg>
 
           {/* Cards - COM Z-INDEX MAIOR AINDA */}
           <div style={{ position: 'relative', zIndex: 20 }}>
