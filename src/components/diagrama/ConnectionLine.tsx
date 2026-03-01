@@ -11,8 +11,8 @@ interface ConnectionLineProps {
     type?: 'normal' | 'dashed' | 'dotted';
     color?: string;
     label?: string;
-    fromSide: Side;
-    toSide: Side;
+    fromSide?: Side;
+    toSide?: Side;
   };
   isSelected?: boolean;
   onClick?: () => void;
@@ -26,7 +26,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
   onClick
 }) => {
 
-  // 🔹 Calcula ponto com base no lado
   const getPoint = (card: typeof fromCard, side: Side) => {
     switch (side) {
       case 'top':
@@ -40,13 +39,19 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
     }
   };
 
-  const startPoint = getPoint(fromCard, connection.fromSide);
-  const endPoint = getPoint(toCard, connection.toSide);
+  // 🔥 Fallback automático para conexões antigas
+  const safeFromSide: Side = connection.fromSide ?? 'right';
+  const safeToSide: Side = connection.toSide ?? 'left';
+
+  const startPoint = getPoint(fromCard, safeFromSide);
+  const endPoint = getPoint(toCard, safeToSide);
+
+  // Segurança extra (nunca quebrar runtime)
+  if (!startPoint || !endPoint) return null;
 
   const midX = (startPoint.x + endPoint.x) / 2;
   const midY = (startPoint.y + endPoint.y) / 2;
 
-  // 🔹 Curva Bézier suave
   const controlPoint1 = { x: midX, y: startPoint.y };
   const controlPoint2 = { x: midX, y: endPoint.y };
 
@@ -57,7 +62,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
       ${endPoint.x} ${endPoint.y}
   `;
 
-  // 🔹 Ângulo da seta
   const dx = 3 * (endPoint.x - controlPoint2.x);
   const dy = 3 * (endPoint.y - controlPoint2.y);
   const arrowAngle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -80,7 +84,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
       onClick={onClick}
       style={{ cursor: 'pointer', pointerEvents: 'all' }}
     >
-      {/* Área clicável invisível */}
       <path
         d={path}
         fill="none"
@@ -89,7 +92,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
         strokeLinecap="round"
       />
 
-      {/* Linha principal */}
       <path
         d={path}
         fill="none"
@@ -99,7 +101,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
         strokeDasharray={getDashArray()}
       />
 
-      {/* Seta */}
       <polygon
         points={`
           ${endPoint.x},${endPoint.y}
@@ -110,7 +111,6 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
         transform={`rotate(${arrowAngle}, ${endPoint.x}, ${endPoint.y})`}
       />
 
-      {/* Label opcional */}
       {connection.label && (
         <text
           x={midX}
