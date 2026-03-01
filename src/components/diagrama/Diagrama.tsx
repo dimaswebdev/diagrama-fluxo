@@ -6,6 +6,7 @@ import Card from './Card';
 import ConnectionLine from './ConnectionLine';
 import SelectionBox from './SelectionBox';
 import FloatingToolbar from './FloatingToolbar';
+import { EditCardDialog } from './EditCardDialog';
 import { useLocalStorage } from '@/hooks/diagrama/useLocalStorage';
 import { useHistory } from '@/hooks/diagrama/useHistory';
 import { 
@@ -52,6 +53,8 @@ const Diagrama: React.FC = () => {
   
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [editingCard, setEditingCard] = useState<CardType | null>(null);
   
   const {
     current,
@@ -575,9 +578,16 @@ const Diagrama: React.FC = () => {
         onRedo={redo}
         onPrint={handlePrint}
         onNewFile={handleNewFile}
+        onEdit={() => {
+          if (selectedCards.size === 1) {
+            const id = Array.from(selectedCards)[0];
+            const card = cards.find(c => c.id === id);
+            if (card) setEditingCard(card);
+          }
+        }}
         canUndo={canUndo}
         canRedo={canRedo}
-        hasSelection={selectedCards.size > 0 || selectedConnections.size > 0}
+        hasSelection={selectedCards.size === 1}
         connectionType={connectionType}
         onConnectionTypeChange={setConnectionType}
         connectionColor={connectionColor}
@@ -628,90 +638,90 @@ const Diagrama: React.FC = () => {
             position: 'relative'
           }}
         >
-              {/* SVG GLOBAL DE CONEXÕES */}
-              <svg
-                className="absolute inset-0"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  zIndex: 5,
-                  pointerEvents: 'auto',
-                }}
+          {/* SVG GLOBAL DE CONEXÕES */}
+          <svg
+            className="absolute inset-0"
+            style={{
+              width: '100%',
+              height: '100%',
+              zIndex: 5,
+              pointerEvents: 'auto',
+            }}
+          >
+            <defs>
+              <marker
+                id="arrow-head"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto"
+                markerUnits="strokeWidth"
               >
-                <defs>
-                  <marker
-                    id="arrow-head"
-                    viewBox="0 0 10 10"
-                    refX="9"
-                    refY="5"
-                    markerWidth="7"
-                    markerHeight="7"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
-                  </marker>
-                </defs>
+                <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
+              </marker>
+            </defs>
 
-                {/* Conexões existentes */}
-                {connections.map((conn: Connection) => {
-                  const fromCard = cards.find((c: CardType) => c.id === conn.fromCard);
-                  const toCard = cards.find((c: CardType) => c.id === conn.toCard);
+            {/* Conexões existentes */}
+            {connections.map((conn: Connection) => {
+              const fromCard = cards.find((c: CardType) => c.id === conn.fromCard);
+              const toCard = cards.find((c: CardType) => c.id === conn.toCard);
 
-                  if (!fromCard || !toCard) return null;
+              if (!fromCard || !toCard) return null;
 
-                  return (
-                    <ConnectionLine
-                      key={conn.id}
-                      fromCard={fromCard}
-                      toCard={toCard}
-                      connection={conn}
-                      isSelected={selectedConnections.has(conn.id)}
-                      onClick={(e?: React.MouseEvent) => {
-                        e?.stopPropagation();
+              return (
+                <ConnectionLine
+                  key={conn.id}
+                  fromCard={fromCard}
+                  toCard={toCard}
+                  connection={conn}
+                  isSelected={selectedConnections.has(conn.id)}
+                  onClick={(e?: React.MouseEvent) => {
+                    e?.stopPropagation();
 
-                        if (e?.ctrlKey || e?.metaKey) {
-                          setSelectedConnections(prev => {
-                            const updated = new Set(prev);
+                    if (e?.ctrlKey || e?.metaKey) {
+                      setSelectedConnections(prev => {
+                        const updated = new Set(prev);
 
-                            if (updated.has(conn.id)) {
-                              updated.delete(conn.id);
-                            } else {
-                              updated.add(conn.id);
-                            }
-
-                            return updated;
-                          });
+                        if (updated.has(conn.id)) {
+                          updated.delete(conn.id);
                         } else {
-                          setSelectedConnections(new Set([conn.id]));
-                          setSelectedCards(new Set());
+                          updated.add(conn.id);
                         }
-                      }}
-                    />
-                  );
-                })}
 
-                {/* Linha temporária ao conectar */}
-                {isConnecting && connectionStart && tempConnectionEnd && (
-                  <line
-                    x1={connectionStart.point.x}
-                    y1={connectionStart.point.y}
-                    x2={tempConnectionEnd.x}
-                    y2={tempConnectionEnd.y}
-                    stroke={connectionColor}
-                    strokeWidth={2 / scale}
-                    strokeDasharray={
-                      connectionType === 'dashed'
-                        ? '6,4'
-                        : connectionType === 'dotted'
-                        ? '2,4'
-                        : undefined
+                        return updated;
+                      });
+                    } else {
+                      setSelectedConnections(new Set([conn.id]));
+                      setSelectedCards(new Set());
                     }
-                    markerEnd="url(#arrow)"
-                    style={{ pointerEvents: 'none' }}
-                  />
-                )}
-              </svg>
+                  }}
+                />
+              );
+            })}
+
+            {/* Linha temporária ao conectar */}
+            {isConnecting && connectionStart && tempConnectionEnd && (
+              <line
+                x1={connectionStart.point.x}
+                y1={connectionStart.point.y}
+                x2={tempConnectionEnd.x}
+                y2={tempConnectionEnd.y}
+                stroke={connectionColor}
+                strokeWidth={2 / scale}
+                strokeDasharray={
+                  connectionType === 'dashed'
+                    ? '6,4'
+                    : connectionType === 'dotted'
+                    ? '2,4'
+                    : undefined
+                }
+                markerEnd="url(#arrow)"
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
+          </svg>
 
           {/* Cards - COM Z-INDEX MAIOR AINDA */}
           <div style={{ position: 'relative', zIndex: 20 }}>
@@ -766,6 +776,18 @@ const Diagrama: React.FC = () => {
           )}
         </div>
       </div>
+
+              {editingCard && (
+          <EditCardDialog
+            card={editingCard}
+            onSave={(updated: Partial<CardType> & { id: string }) => {
+              updateCard(updated.id, updated);
+              saveToHistory();
+              setEditingCard(null);
+            }}
+            onClose={() => setEditingCard(null)}
+          />
+        )}
     </div>
   );
 };

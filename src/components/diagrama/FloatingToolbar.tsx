@@ -28,6 +28,9 @@ interface FloatingToolbarProps {
   onRedo: () => void;
   onPrint: () => void;
   onNewFile: () => void;
+
+  onEdit: () => void; // 🔥 ADICIONE ISSO
+
   canUndo: boolean;
   canRedo: boolean;
   hasSelection: boolean;
@@ -69,6 +72,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onRedo,
   onPrint,
   onNewFile,
+  onEdit,
   canUndo,
   canRedo,
   hasSelection,
@@ -133,35 +137,52 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           </button>
         </div>
 
-        {/* Editar */}
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            className={`${iconBtnBase} ${canUndo ? iconBtnEnabled : iconBtnDisabled}`}
-            title="Desfazer (Ctrl+Z)"
-          >
-            <Undo2 className="w-5 h-5" />
-          </button>
+          {/* Editar */}
+          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              className={`${iconBtnBase} ${canUndo ? iconBtnEnabled : iconBtnDisabled}`}
+              title="Desfazer (Ctrl+Z)"
+            >
+              <Undo2 className="w-5 h-5" />
+            </button>
 
-          <button
-            onClick={onRedo}
-            disabled={!canRedo}
-            className={`${iconBtnBase} ${canRedo ? iconBtnEnabled : iconBtnDisabled}`}
-            title="Refazer (Ctrl+Y / Ctrl+Shift+Z)"
-          >
-            <Redo2 className="w-5 h-5" />
-          </button>
+            <button
+              onClick={onRedo}
+              disabled={!canRedo}
+              className={`${iconBtnBase} ${canRedo ? iconBtnEnabled : iconBtnDisabled}`}
+              title="Refazer (Ctrl+Y)"
+            >
+              <Redo2 className="w-5 h-5" />
+            </button>
 
-          <button
-            onClick={onDelete}
-            disabled={!hasSelection}
-            className={`${iconBtnBase} ${hasSelection ? 'hover:bg-red-50 active:bg-red-100 text-red-600' : iconBtnDisabled}`}
-            title="Excluir (Delete)"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-        </div>
+            <button
+              onClick={onEdit}
+              disabled={!hasSelection}
+              className={`${iconBtnBase} ${
+                hasSelection
+                  ? 'hover:bg-indigo-50 active:bg-indigo-100 text-indigo-600'
+                  : iconBtnDisabled
+              }`}
+              title="Editar Card"
+            >
+              <PencilRuler className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={onDelete}
+              disabled={!hasSelection}
+              className={`${iconBtnBase} ${
+                hasSelection
+                  ? 'hover:bg-red-50 active:bg-red-100 text-red-600'
+                  : iconBtnDisabled
+              }`}
+              title="Excluir"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
 
         {/* Cards */}
         <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
