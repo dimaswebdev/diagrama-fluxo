@@ -53,7 +53,14 @@ const Diagrama: React.FC = () => {
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const { canUndo, canRedo, pushState, undo, redo } = useHistory({ cards, connections });
+  const {
+    current,
+    canUndo,
+    canRedo,
+    pushState,
+    undo,
+    redo
+  } = useHistory({ cards, connections });
 
   useEffect(() => {
     if (cards.length === 0) {
@@ -506,10 +513,11 @@ const Diagrama: React.FC = () => {
   };
 
   const updateCard = (id: string, updates: Partial<CardType>): void => {
-    setCards((prev: CardType[]) => prev.map((card: CardType) => 
-      card.id === id ? { ...card, ...updates } : card
-    ));
-    saveToHistory();
+    setCards(prev =>
+      prev.map(card =>
+        card.id === id ? { ...card, ...updates } : card
+      )
+    );
   };
 
   return (
