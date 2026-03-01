@@ -201,29 +201,44 @@ const Diagrama: React.FC = () => {
   }, [scale]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+
+    // 🖱️ PAN (botão do meio ou ALT + clique)
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       return;
     }
-
-    if ((e.target as HTMLElement).closest('.card')) {
-      return;
+  
+    const target = e.target as HTMLElement;
+  
+    // 🔹 Se clicou em card → não interfere
+    if (target.closest('.card')) return;
+  
+    // 🔹 Se clicou em ponto de conexão → não interfere
+    if (target.closest('.connection-point')) return;
+  
+    // 🔹 Se clicou em linha → não inicia selection box
+    if (target.closest('.connection-line')) return;
+  
+    // 🔥 Clique vazio no canvas
+    // Se NÃO estiver segurando CTRL → limpa seleção
+    if (!e.ctrlKey && !e.metaKey) {
+      setSelectedCards(new Set());
+      setSelectedConnections(new Set());
     }
-
-    if ((e.target as HTMLElement).closest('.connection-point')) {
-      return;
-    }
-
+  
+    // 🔹 Inicia seleção por arrasto (selection box)
     setIsDragging(true);
+  
     const rect = diagramRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = (e.clientX - rect.left - offset.x) / scale;
-      const y = (e.clientY - rect.top - offset.y) / scale;
-      setDragStart({ x, y });
-      setDragEnd({ x, y });
-    }
+    if (!rect) return;
+  
+    const x = (e.clientX - rect.left - offset.x) / scale;
+    const y = (e.clientY - rect.top - offset.y) / scale;
+  
+    setDragStart({ x, y });
+    setDragEnd({ x, y });
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -425,13 +440,22 @@ const Diagrama: React.FC = () => {
   };
 
   const deleteSelected = (): void => {
+    if (selectedCards.size === 0 && selectedConnections.size === 0) return;
+  
     saveToHistory();
-    
-    setCards((prev: CardType[]) => prev.filter((card: CardType) => !selectedCards.has(card.id)));
-    setConnections((prev: Connection[]) => prev.filter((conn: Connection) => 
-      !selectedCards.has(conn.fromCard) && 
-      !selectedCards.has(conn.toCard)
-    ));
+  
+    setCards(prev =>
+      prev.filter(card => !selectedCards.has(card.id))
+    );
+  
+    setConnections(prev =>
+      prev.filter(conn =>
+        !selectedConnections.has(conn.id) &&
+        !selectedCards.has(conn.fromCard) &&
+        !selectedCards.has(conn.toCard)
+      )
+    );
+  
     setSelectedCards(new Set());
     setSelectedConnections(new Set());
   };
@@ -590,8 +614,27 @@ const Diagrama: React.FC = () => {
                   toCard={toCard}
                   connection={conn}
                   isSelected={selectedConnections.has(conn.id)}
-                  onClick={() => {
-                    setSelectedConnections(new Set([conn.id]));
+                  onClick={(e?: React.MouseEvent) => {
+                    e?.stopPropagation();
+
+                    // Multi seleção com CTRL
+                    if (e?.ctrlKey || e?.metaKey) {
+                      setSelectedConnections(prev => {
+                        const updated = new Set(prev);
+
+                        if (updated.has(conn.id)) {
+                          updated.delete(conn.id);
+                        } else {
+                          updated.add(conn.id);
+                        }
+
+                        return updated;
+                      });
+                    } else {
+                      // Seleção exclusiva
+                      setSelectedConnections(new Set([conn.id]));
+                      setSelectedCards(new Set());
+                    }
                   }}
                 />
               );

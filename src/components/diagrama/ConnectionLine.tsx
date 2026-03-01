@@ -15,14 +15,14 @@ interface ConnectionLineProps {
     toSide?: Side;
   };
   isSelected?: boolean;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<SVGGElement>) => void;
 }
 
 const ConnectionLine: React.FC<ConnectionLineProps> = ({
   fromCard,
   toCard,
   connection,
-  isSelected,
+  isSelected = false,
   onClick
 }) => {
 
@@ -39,14 +39,13 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
     }
   };
 
-  // 🔥 Fallback automático para conexões antigas
+  // 🔹 Compatibilidade com conexões antigas
   const safeFromSide: Side = connection.fromSide ?? 'right';
   const safeToSide: Side = connection.toSide ?? 'left';
 
   const startPoint = getPoint(fromCard, safeFromSide);
   const endPoint = getPoint(toCard, safeToSide);
 
-  // Segurança extra (nunca quebrar runtime)
   if (!startPoint || !endPoint) return null;
 
   const midX = (startPoint.x + endPoint.x) / 2;
@@ -81,26 +80,41 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
   return (
     <g
       className="connection-line"
-      onClick={onClick}
-      style={{ cursor: 'pointer', pointerEvents: 'all' }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
+      style={{
+        cursor: 'pointer',
+        pointerEvents: 'all'
+      }}
     >
+      {/* 🔹 Área invisível para clique confortável */}
       <path
         d={path}
         fill="none"
         stroke="transparent"
-        strokeWidth="12"
+        strokeWidth="14"
         strokeLinecap="round"
       />
 
+      {/* 🔹 Linha principal */}
       <path
         d={path}
         fill="none"
         stroke={strokeColor}
-        strokeWidth={isSelected ? 3 : 2}
+        strokeWidth={isSelected ? 4 : 2}
         strokeLinecap="round"
         strokeDasharray={getDashArray()}
+        style={{
+          transition: 'all 0.15s ease',
+          filter: isSelected
+            ? 'drop-shadow(0 0 4px #2563eb)'
+            : 'none'
+        }}
       />
 
+      {/* 🔹 Seta */}
       <polygon
         points={`
           ${endPoint.x},${endPoint.y}
@@ -109,12 +123,16 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
         `}
         fill={strokeColor}
         transform={`rotate(${arrowAngle}, ${endPoint.x}, ${endPoint.y})`}
+        style={{
+          transition: 'all 0.15s ease'
+        }}
       />
 
+      {/* 🔹 Label opcional */}
       {connection.label && (
         <text
           x={midX}
-          y={midY - 8}
+          y={midY - 10}
           textAnchor="middle"
           className="text-xs fill-gray-600 select-none"
           pointerEvents="none"
