@@ -1,22 +1,15 @@
 'use client'
 
 import React, { useState, useRef } from 'react';
+import { Card as CardType, Point } from '@/types/diagrama';
 
 interface CardProps {
-  card: {
-    id: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    content: string;
-    type?: 'default' | 'input' | 'output' | 'process' | 'decision';
-  };
+  card: CardType;
   isSelected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDragStart: (e: React.MouseEvent) => void;
-  onUpdate: (updates: any) => void;
-  onConnectionStart: (point: { x: number; y: number }) => void;
+  onUpdate: (updates: Partial<CardType>) => void;
+  onConnectionStart: (point: Point) => void;
   onConnectionEnd: (targetCardId: string) => void;
 }
 
@@ -35,7 +28,7 @@ const Card: React.FC<CardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
 
   const getCardStyles = () => {
-    const baseStyles = "absolute bg-white border rounded shadow-sm hover:shadow-md transition-all cursor-move";
+    const baseStyles = "absolute bg-white border rounded shadow-sm hover:shadow-md transition-all";
     const selectedStyles = isSelected ? "ring-2 ring-blue-500 ring-offset-2" : "border-gray-200";
     
     const typeStyles = {
@@ -66,6 +59,27 @@ const Card: React.FC<CardProps> = ({
     }
   };
 
+  const handleConnectionPointMouseDown = (
+    e: React.MouseEvent,
+    point: Point
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+  
+    const worldPoint: Point = {
+      x: card.x + point.x,
+      y: card.y + point.y
+    };
+  
+    onConnectionStart(worldPoint);
+  };
+
+  const handleConnectionPointMouseUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onConnectionEnd(card.id);
+  };
+
   const connectionPoints = [
     { id: 'top', x: card.width / 2, y: 0 },
     { id: 'right', x: card.width, y: card.height / 2 },
@@ -87,7 +101,8 @@ const Card: React.FC<CardProps> = ({
         top: card.y,
         width: card.width,
         height: card.height,
-        zIndex: isSelected ? 10 : 1
+        zIndex: isSelected ? 20 : 10,
+        cursor: 'move'
       }}
     >
       {isEditing ? (
@@ -112,25 +127,20 @@ const Card: React.FC<CardProps> = ({
         </>
       )}
 
+      {/* Pontos de conexão - SEMPRE VISÍVEIS quando hover ou selecionado */}
       {(isHovered || isSelected) && connectionPoints.map(point => (
         <div
           key={point.id}
-          className="absolute w-3 h-3 bg-blue-500 rounded-full cursor-crosshair hover:scale-125 hover:bg-blue-600 transition-all z-20"
-          style={{ left: point.x - 6, top: point.y - 6 }}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            const rect = cardRef.current?.getBoundingClientRect();
-            if (rect) {
-              onConnectionStart({
-                x: rect.left + point.x,
-                y: rect.top + point.y
-              });
-            }
+          className="absolute w-4 h-4 bg-blue-500 rounded-full cursor-crosshair hover:bg-blue-600 transition-all z-30"
+          style={{ 
+            left: point.x - 8, 
+            top: point.y - 8,
+            border: '2px solid white',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
           }}
-          onMouseUp={(e) => {
-            e.stopPropagation();
-            onConnectionEnd(card.id);
-          }}
+          onMouseDown={(e) => handleConnectionPointMouseDown(e, point)}
+          onMouseUp={handleConnectionPointMouseUp}
+          title={`Conectar ${point.id}`}
         />
       ))}
     </div>

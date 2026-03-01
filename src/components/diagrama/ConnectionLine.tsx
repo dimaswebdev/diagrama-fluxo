@@ -9,114 +9,91 @@ interface ConnectionLineProps {
     type?: 'normal' | 'dashed' | 'dotted';
     color?: string;
     label?: string;
+    fromPoint: { x: number; y: number };
+    toPoint: { x: number; y: number };
   };
   isSelected?: boolean;
   onClick?: () => void;
 }
 
-const ConnectionLine: React.FC<ConnectionLineProps> = ({ 
-  fromCard, 
-  toCard, 
+const ConnectionLine: React.FC<ConnectionLineProps> = ({
   connection,
   isSelected,
-  onClick 
+  onClick
 }) => {
-  const getConnectionPoints = () => {
-    const fromCenter = {
-      x: fromCard.x + fromCard.width / 2,
-      y: fromCard.y + fromCard.height / 2
-    };
-    
-    const toCenter = {
-      x: toCard.x + toCard.width / 2,
-      y: toCard.y + toCard.height / 2
-    };
 
-    const dx = toCenter.x - fromCenter.x;
-    const dy = toCenter.y - fromCenter.y;
+  const startPoint = connection.fromPoint;
+  const endPoint = connection.toPoint;
 
-    let startPoint = { x: fromCenter.x, y: fromCenter.y };
-    let endPoint = { x: toCenter.x, y: toCenter.y };
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) {
-        startPoint.x = fromCard.x + fromCard.width;
-        endPoint.x = toCard.x;
-      } else {
-        startPoint.x = fromCard.x;
-        endPoint.x = toCard.x + toCard.width;
-      }
-      startPoint.y = fromCenter.y;
-      endPoint.y = toCenter.y;
-    } else {
-      if (dy > 0) {
-        startPoint.y = fromCard.y + fromCard.height;
-        endPoint.y = toCard.y;
-      } else {
-        startPoint.y = fromCard.y;
-        endPoint.y = toCard.y + toCard.height;
-      }
-      startPoint.x = fromCenter.x;
-      endPoint.x = toCenter.x;
-    }
-
-    return { startPoint, endPoint };
-  };
-
-  const getDashArray = () => {
-    switch (connection.type) {
-      case 'dashed': return '5,5';
-      case 'dotted': return '2,2';
-      default: return 'none';
-    }
-  };
-
-  const { startPoint, endPoint } = getConnectionPoints();
-  
   const midX = (startPoint.x + endPoint.x) / 2;
-  
+  const midY = (startPoint.y + endPoint.y) / 2;
+
   const controlPoint1 = { x: midX, y: startPoint.y };
   const controlPoint2 = { x: midX, y: endPoint.y };
 
-  const path = `M ${startPoint.x} ${startPoint.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${endPoint.x} ${endPoint.y}`;
+  const path = `
+    M ${startPoint.x} ${startPoint.y}
+    C ${controlPoint1.x} ${controlPoint1.y},
+      ${controlPoint2.x} ${controlPoint2.y},
+      ${endPoint.x} ${endPoint.y}
+  `;
 
-  const getArrowRotation = () => {
-    const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x) * 180 / Math.PI;
-    return angle;
+  const dx = 3 * (endPoint.x - controlPoint2.x);
+  const dy = 3 * (endPoint.y - controlPoint2.y);
+  const arrowAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+  const getDashArray = () => {
+    switch (connection.type) {
+      case 'dashed': return '6,4';
+      case 'dotted': return '2,4';
+      default: return undefined;
+    }
   };
 
+  const strokeColor =
+    connection.color ||
+    (isSelected ? '#2563eb' : '#94a3b8');
+
   return (
-    <g 
+    <g
       className="connection-line"
       onClick={onClick}
-      style={{ cursor: 'pointer' }}
+      style={{ cursor: 'pointer', pointerEvents: 'all' }}
     >
       <path
         d={path}
         fill="none"
         stroke="transparent"
-        strokeWidth="10"
+        strokeWidth="12"
         strokeLinecap="round"
       />
+
       <path
         d={path}
         fill="none"
-        stroke={connection.color || (isSelected ? '#2563eb' : '#94a3b8')}
-        strokeWidth={isSelected ? '3' : '2'}
+        stroke={strokeColor}
+        strokeWidth={isSelected ? 3 : 2}
         strokeLinecap="round"
         strokeDasharray={getDashArray()}
       />
+
       <polygon
-        points={`${endPoint.x},${endPoint.y} ${endPoint.x - 8},${endPoint.y - 4} ${endPoint.x - 8},${endPoint.y + 4}`}
-        fill={connection.color || (isSelected ? '#2563eb' : '#94a3b8')}
-        transform={`rotate(${getArrowRotation()}, ${endPoint.x}, ${endPoint.y})`}
+        points={`
+          ${endPoint.x},${endPoint.y}
+          ${endPoint.x - 10},${endPoint.y - 5}
+          ${endPoint.x - 10},${endPoint.y + 5}
+        `}
+        fill={strokeColor}
+        transform={`rotate(${arrowAngle}, ${endPoint.x}, ${endPoint.y})`}
       />
+
       {connection.label && (
         <text
           x={midX}
-          y={midY - 10}
+          y={midY - 8}
           textAnchor="middle"
-          className="text-xs fill-gray-600"
+          className="text-xs fill-gray-600 select-none"
+          pointerEvents="none"
         >
           {connection.label}
         </text>

@@ -16,6 +16,8 @@ export interface Connection {
   type?: 'normal' | 'dashed' | 'dotted';
   color?: string;
   label?: string;
+  fromPoint: { x: number; y: number };
+  toPoint: { x: number; y: number };
 }
 
 export interface Point {

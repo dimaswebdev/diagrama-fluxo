@@ -1,4 +1,4 @@
-// components/Diagrama.tsx
+
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -8,82 +8,59 @@ import SelectionBox from './SelectionBox';
 import FloatingToolbar from './FloatingToolbar';
 import { useLocalStorage } from '@/hooks/diagrama/useLocalStorage';
 import { useHistory } from '@/hooks/diagrama/useHistory';
+import { 
+  Card as CardType, 
+  Connection, 
+  Point, 
+  DiagramState,
+  SelectionBox as SelectionBoxType,
+  ConnectionType,
+  CardType as CardTypeEnum,
+  GRID_SIZE, 
+  A4_WIDTH, 
+  A4_HEIGHT 
+} from '@/types/diagrama';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-interface Card {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  content: string;
-  type?: 'default' | 'input' | 'output' | 'process' | 'decision';
-  color?: string;
-}
-
-interface Connection {
-  id: string;
-  fromCard: string;
-  toCard: string;
-  type?: 'normal' | 'dashed' | 'dotted';
-  color?: string;
-  label?: string;
-}
-
-interface Point {
-  x: number;
-  y: number;
-}
-
-// Constantes para o grid e A4
-const GRID_SIZE = 20;
-const A4_WIDTH = 595; // pixels em 72 DPI
-const A4_HEIGHT = 842;
-
 const Diagrama: React.FC = () => {
   // Estados principais
-  const [cards, setCards] = useLocalStorage<Card[]>('diagram-cards', []);
+  const [cards, setCards] = useLocalStorage<CardType[]>('diagram-cards', []);
   const [connections, setConnections] = useLocalStorage<Connection[]>('diagram-connections', []);
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [selectedConnections, setSelectedConnections] = useState<Set<string>>(new Set());
-  const [fileName, setFileName] = useLocalStorage('diagram-filename', 'Diagrama sem título');
+  const [fileName, setFileName] = useLocalStorage<string>('diagram-filename', 'Diagrama sem título');
   
-  // Estados de interação
-  const [isDragging, setIsDragging] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [dragEnd, setDragEnd] = useState({ x: 0, y: 0 });
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<Point>({ x: 0, y: 0 });
+  const [dragEnd, setDragEnd] = useState<Point>({ x: 0, y: 0 });
+  const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
   
-  // Estados de conexão
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [connectionStart, setConnectionStart] = useState<{ cardId: string; point: Point; type?: string; color?: string } | null>(null);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [connectionStart, setConnectionStart] = useState<{ cardId: string; point: Point } | null>(null);
   const [tempConnectionEnd, setTempConnectionEnd] = useState<Point | null>(null);
-  const [connectionType, setConnectionType] = useState<'normal' | 'dashed' | 'dotted'>('normal');
-  const [connectionColor, setConnectionColor] = useState('#2563eb');
+  const [connectionType, setConnectionType] = useState<ConnectionType>('normal');
+  const [connectionColor, setConnectionColor] = useState<string>('#2563eb');
   
-  // Estados de visualização
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDraggingCard, setIsDraggingCard] = useState(false);
+  const [scale, setScale] = useState<number>(1);
+  const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
+  const [isDraggingCard, setIsDraggingCard] = useState<boolean>(false);
   const [draggedCards, setDraggedCards] = useState<Map<string, { startX: number; startY: number }>>(new Map());
-  const [showGrid, setShowGrid] = useState(true);
-  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState<boolean>(true);
+  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
   
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Histórico para undo/redo
-  const { history, canUndo, canRedo, pushState, undo, redo } = useHistory({ cards, connections });
+  const { canUndo, canRedo, pushState, undo, redo } = useHistory({ cards, connections });
 
-  // Inicializar com um card central se estiver vazio
   useEffect(() => {
     if (cards.length === 0) {
-      const centerX = (A4_WIDTH / 2) - 75; // 75 é metade da largura do card
-      const centerY = (A4_HEIGHT / 2) - 40; // 40 é metade da altura
+      const centerX = (A4_WIDTH / 2) - 75;
+      const centerY = (A4_HEIGHT / 2) - 40;
       
-      const initialCard: Card = {
+      const initialCard: CardType = {
         id: Date.now().toString(),
         x: centerX,
         y: centerY,
@@ -99,26 +76,20 @@ const Diagrama: React.FC = () => {
     }
   }, []);
 
-  // Salvar estado no histórico antes de mudanças importantes
-  const saveToHistory = useCallback(() => {
+  const saveToHistory = useCallback((): void => {
     pushState({ cards, connections });
   }, [cards, connections, pushState]);
 
-  // Atalhos de teclado com undo/redo
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      // Ctrl+A: Selecionar todos
       if (e.ctrlKey && e.key === 'a') {
         e.preventDefault();
-        const allCardIds = new Set(cards.map(card => card.id));
+        const allCardIds = new Set(cards.map((card: CardType) => card.id));
         setSelectedCards(allCardIds);
       }
 
-      // Ctrl+Z: Undo
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
         const previousState = undo();
@@ -130,7 +101,6 @@ const Diagrama: React.FC = () => {
         }
       }
 
-      // Ctrl+Y ou Ctrl+Shift+Z: Redo
       if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
         e.preventDefault();
         const nextState = redo();
@@ -142,30 +112,20 @@ const Diagrama: React.FC = () => {
         }
       }
 
-      // Ctrl+N: Novo arquivo
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         handleNewFile();
       }
 
-      // Ctrl+S: Salvar
-      if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        // Já está salvando automaticamente com localStorage
-      }
-
-      // Ctrl+P: Imprimir/PDF
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
         handlePrint();
       }
 
-      // Delete: Excluir selecionados
       if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteSelected();
       }
 
-      // Esc: Cancelar conexão
       if (e.key === 'Escape' && isConnecting) {
         cancelConnection();
       }
@@ -173,15 +133,14 @@ const Diagrama: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cards, connections, selectedCards, isConnecting, undo, redo]);
+  }, [cards, selectedCards, isConnecting, undo, redo]);
 
-  // Novo arquivo
-  const handleNewFile = () => {
+  const handleNewFile = (): void => {
     if (window.confirm('Criar novo arquivo? Todas as alterações não salvas serão perdidas.')) {
       const centerX = (A4_WIDTH / 2) - 75;
       const centerY = (A4_HEIGHT / 2) - 40;
       
-      const initialCard: Card = {
+      const initialCard: CardType = {
         id: Date.now().toString(),
         x: centerX,
         y: centerY,
@@ -200,43 +159,20 @@ const Diagrama: React.FC = () => {
     }
   };
 
-  // Imprimir/Salvar como PDF
-  const handlePrint = async () => {
+  const handlePrint = async (): Promise<void> => {
     if (!diagramRef.current) return;
-
     try {
-      // Capturar o diagrama como canvas
-      const canvas = await html2canvas(diagramRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        allowTaint: false,
-        useCORS: true
-      });
-
-      // Criar PDF em A4
-      const pdf = new jsPDF({
-        orientation: A4_WIDTH > A4_HEIGHT ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [A4_WIDTH, A4_HEIGHT]
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Calcular dimensões para caber no A4
-      const imgWidth = A4_WIDTH;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      const canvas = await html2canvas(diagramRef.current, { scale: 2 });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
       pdf.save(`${fileName}.pdf`);
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
-      alert('Erro ao gerar PDF. Tente novamente.');
     }
   };
 
-  // Zoom com wheel
   useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
+    const handleWheel = (e: WheelEvent): void => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -247,7 +183,7 @@ const Diagrama: React.FC = () => {
           const mouseX = e.clientX - rect.left;
           const mouseY = e.clientY - rect.top;
           
-          setOffset(prev => ({
+          setOffset((prev: Point) => ({
             x: mouseX - (mouseX - prev.x) * (newScale / scale),
             y: mouseY - (mouseY - prev.y) * (newScale / scale)
           }));
@@ -264,8 +200,7 @@ const Diagrama: React.FC = () => {
     }
   }, [scale]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Pan com botão do meio ou Alt + clique
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
       setIsPanning(true);
@@ -277,7 +212,7 @@ const Diagrama: React.FC = () => {
       return;
     }
 
-    if ((e.target as HTMLElement).closest('.connection-line')) {
+    if ((e.target as HTMLElement).closest('.connection-point')) {
       return;
     }
 
@@ -291,7 +226,7 @@ const Diagrama: React.FC = () => {
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>): void => {
     const rect = diagramRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -321,7 +256,7 @@ const Diagrama: React.FC = () => {
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>): void => {
     const rect = diagramRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -336,7 +271,7 @@ const Diagrama: React.FC = () => {
     if (isDraggingCard) {
       setIsDraggingCard(false);
       setDraggedCards(new Map());
-      saveToHistory(); // Salvar após mover cards
+      saveToHistory();
       return;
     }
 
@@ -358,7 +293,7 @@ const Diagrama: React.FC = () => {
       const selectionBox = getSelectionBox();
       const newSelected = new Set<string>();
       
-      cards.forEach(card => {
+      cards.forEach((card: CardType) => {
         if (isCardInSelection(card, selectionBox)) {
           newSelected.add(card.id);
         }
@@ -367,7 +302,7 @@ const Diagrama: React.FC = () => {
       if (!e.shiftKey) {
         setSelectedCards(newSelected);
       } else {
-        setSelectedCards(prev => {
+        setSelectedCards((prev: Set<string>) => {
           const updated = new Set(prev);
           newSelected.forEach(id => updated.add(id));
           return updated;
@@ -380,44 +315,37 @@ const Diagrama: React.FC = () => {
 
   const handleCardDragStart = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (!selectedCards.has(id) && !e.shiftKey && !e.ctrlKey) {
-      setSelectedCards(new Set([id]));
-    }
-
-    setIsDraggingCard(true);
-    
+  
     const rect = diagramRef.current?.getBoundingClientRect();
-    if (rect) {
-      const worldX = (e.clientX - rect.left - offset.x) / scale;
-      const worldY = (e.clientY - rect.top - offset.y) / scale;
-      setDragStart({ x: worldX, y: worldY });
-    }
-    
-    const newDraggedCards = new Map();
-    selectedCards.forEach(cardId => {
-      const card = cards.find(c => c.id === cardId);
-      if (card) {
-        newDraggedCards.set(cardId, { startX: card.x, startY: card.y });
-      }
-    });
-    
-    setDraggedCards(newDraggedCards);
+    if (!rect) return;
+  
+    const worldX = (e.clientX - rect.left - offset.x) / scale;
+    const worldY = (e.clientY - rect.top - offset.y) / scale;
+  
+    setSelectedCards(new Set([id]));
+    setIsDraggingCard(true);
+    setDragStart({ x: worldX, y: worldY });
+  
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+  
+    setDraggedCards(new Map([
+      [id, { startX: card.x, startY: card.y }]
+    ]));
   };
 
-  const moveDraggedCards = (worldX: number, worldY: number) => {
+  const moveDraggedCards = (worldX: number, worldY: number): void => {
     if (!dragStart) return;
 
     const deltaX = worldX - dragStart.x;
     const deltaY = worldY - dragStart.y;
 
-    setCards(prev => prev.map(card => {
+    setCards((prev: CardType[]) => prev.map((card: CardType) => {
       const draggedCard = draggedCards.get(card.id);
       if (draggedCard) {
         let newX = draggedCard.startX + deltaX;
         let newY = draggedCard.startY + deltaY;
 
-        // Snap to grid
         if (snapToGrid) {
           newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
           newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
@@ -429,78 +357,108 @@ const Diagrama: React.FC = () => {
     }));
   };
 
-  const handleConnectionStart = (cardId: string, point: Point) => {
+  const handleConnectionStart = (cardId: string, point: Point): void => {
     setIsConnecting(true);
-    setConnectionStart({ 
-      cardId, 
-      point,
-      type: connectionType,
-      color: connectionColor 
-    });
+    setConnectionStart({ cardId, point });
   };
+
+  function calculateConnectionPoints(from: CardType, to: CardType) {
+    const fromCenter = {
+      x: from.x + from.width / 2,
+      y: from.y + from.height / 2
+    };
+  
+    const toCenter = {
+      x: to.x + to.width / 2,
+      y: to.y + to.height / 2
+    };
+  
+    const dx = toCenter.x - fromCenter.x;
+    const dy = toCenter.y - fromCenter.y;
+  
+    let startPoint = { ...fromCenter };
+    let endPoint = { ...toCenter };
+  
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) {
+        startPoint.x = from.x + from.width;
+        endPoint.x = to.x;
+      } else {
+        startPoint.x = from.x;
+        endPoint.x = to.x + to.width;
+      }
+      startPoint.y = fromCenter.y;
+      endPoint.y = toCenter.y;
+    } else {
+      if (dy > 0) {
+        startPoint.y = from.y + from.height;
+        endPoint.y = to.y;
+      } else {
+        startPoint.y = from.y;
+        endPoint.y = to.y + to.height;
+      }
+      startPoint.x = fromCenter.x;
+      endPoint.x = toCenter.x;
+    }
+  
+    return { startPoint, endPoint };
+  }
+  
 
   const createConnection = (
-    fromCard: string, 
-    toCard: string, 
-    type: 'normal' | 'dashed' | 'dotted' = 'normal',
+    fromId: string,
+    toId: string,
+    type: ConnectionType = 'normal',
     color: string = '#2563eb'
-  ) => {
+  ): void => {
+  
+    const fromCard = cards.find(c => c.id === fromId);
+    const toCard = cards.find(c => c.id === toId);
+  
+    if (!fromCard || !toCard) return;
+  
+    const { startPoint, endPoint } = calculateConnectionPoints(fromCard, toCard);
+  
     const newConnection: Connection = {
-      id: `${fromCard}-${toCard}-${Date.now()}`,
-      fromCard,
-      toCard,
+      id: `${fromId}-${toId}-${Date.now()}`,
+      fromCard: fromId,
+      toCard: toId,
       type,
-      color
+      color,
+      fromPoint: startPoint,
+      toPoint: endPoint
     };
+  
     setConnections(prev => [...prev, newConnection]);
-    saveToHistory(); // Salvar após criar conexão
-  };
-
-  const updateConnection = (id: string, updates: Partial<Connection>) => {
-    setConnections(prev => prev.map(conn => 
-      conn.id === id ? { ...conn, ...updates } : conn
-    ));
     saveToHistory();
   };
 
-  const deleteConnection = (id: string) => {
-    setConnections(prev => prev.filter(conn => conn.id !== id));
-    setSelectedConnections(prev => {
-      const updated = new Set(prev);
-      updated.delete(id);
-      return updated;
-    });
-    saveToHistory();
-  };
-
-  const cancelConnection = () => {
+  const cancelConnection = (): void => {
     setIsConnecting(false);
     setConnectionStart(null);
     setTempConnectionEnd(null);
   };
 
-  const deleteSelected = () => {
-    // Salvar antes de excluir
+  const deleteSelected = (): void => {
     saveToHistory();
     
-    setCards(prev => prev.filter(card => !selectedCards.has(card.id)));
-    setConnections(prev => prev.filter(conn => 
+    setCards((prev: CardType[]) => prev.filter((card: CardType) => !selectedCards.has(card.id)));
+    setConnections((prev: Connection[]) => prev.filter((conn: Connection) => 
       !selectedCards.has(conn.fromCard) && 
-      !selectedCards.has(conn.toCard) &&
-      !selectedConnections.has(conn.id)
+      !selectedCards.has(conn.toCard)
     ));
     setSelectedCards(new Set());
     setSelectedConnections(new Set());
   };
 
-  const findCardAtPosition = (x: number, y: number): Card | null => {
-    return cards.find(card => 
+  const findCardAtPosition = (x: number, y: number): CardType | null => {
+    return cards.find((card: CardType) => 
       x >= card.x && x <= card.x + card.width &&
       y >= card.y && y <= card.y + card.height
     ) || null;
   };
 
-  const getSelectionBox = () => {
+  const getSelectionBox = (): SelectionBoxType => {
     return {
       x: Math.min(dragStart.x, dragEnd.x),
       y: Math.min(dragStart.y, dragEnd.y),
@@ -509,7 +467,7 @@ const Diagrama: React.FC = () => {
     };
   };
 
-  const isCardInSelection = (card: Card, selection: any) => {
+  const isCardInSelection = (card: CardType, selection: SelectionBoxType): boolean => {
     return (
       card.x < selection.x + selection.width &&
       card.x + card.width > selection.x &&
@@ -518,16 +476,15 @@ const Diagrama: React.FC = () => {
     );
   };
 
-  const addCard = (type: Card['type'] = 'default') => {
+  const addCard = (type: CardTypeEnum = 'default'): void => {
     saveToHistory();
     
-    // Posicionar novo card próximo ao centro da visualização atual
     const viewportCenter = {
       x: (-offset.x / scale) + (containerRef.current?.clientWidth || 0) / (2 * scale),
       y: (-offset.y / scale) + (containerRef.current?.clientHeight || 0) / (2 * scale)
     };
 
-    const newCard: Card = {
+    const newCard: CardType = {
       id: Date.now().toString(),
       x: viewportCenter.x - 75,
       y: viewportCenter.y - 40,
@@ -536,11 +493,11 @@ const Diagrama: React.FC = () => {
       content: 'Novo Card',
       type
     };
-    setCards(prev => [...prev, newCard]);
+    setCards((prev: CardType[]) => [...prev, newCard]);
   };
 
-  const updateCard = (id: string, updates: Partial<Card>) => {
-    setCards(prev => prev.map(card => 
+  const updateCard = (id: string, updates: Partial<CardType>): void => {
+    setCards((prev: CardType[]) => prev.map((card: CardType) => 
       card.id === id ? { ...card, ...updates } : card
     ));
     saveToHistory();
@@ -555,7 +512,7 @@ const Diagrama: React.FC = () => {
           <input
             type="text"
             value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFileName(e.target.value)}
             className="font-medium text-gray-700 bg-transparent border border-transparent hover:border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -585,8 +542,8 @@ const Diagrama: React.FC = () => {
         snapToGrid={snapToGrid}
         onSnapToGridChange={setSnapToGrid}
         scale={scale}
-        onZoomIn={() => setScale(s => Math.min(s + 0.1, 3))}
-        onZoomOut={() => setScale(s => Math.max(s - 0.1, 0.1))}
+        onZoomIn={() => setScale((s: number) => Math.min(s + 0.1, 3))}
+        onZoomOut={() => setScale((s: number) => Math.max(s - 0.1, 0.1))}
         onZoomReset={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
       />
 
@@ -614,103 +571,117 @@ const Diagrama: React.FC = () => {
           cancelConnection();
         }}
       >
+        {/* Área de trabalho (sem o fundo branco fixo) */}
         <div
           className="absolute"
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
             transformOrigin: '0 0',
-            width: A4_WIDTH,
-            height: A4_HEIGHT,
-            boxShadow: '0 0 0 1px rgba(0,0,0,0.05)',
-            backgroundColor: 'white'
+            minWidth: 4000,
+            minHeight: 4000,
+            backgroundColor: 'transparent',
+            position: 'relative'
           }}
         >
-          {/* SVG para conexões */}
+          {/* SVG para conexões - AGORA COM Z-INDEX MAIOR QUE O FUNDO */}
           <svg
-            className="absolute inset-0 pointer-events-none"
-            style={{ width: A4_WIDTH, height: A4_HEIGHT }}
+            className="absolute inset-0"
+            style={{
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none'
+            }}
           >
-            {connections.map(conn => {
-              const fromCard = cards.find(c => c.id === conn.fromCard);
-              const toCard = cards.find(c => c.id === conn.toCard);
-              
-              if (fromCard && toCard) {
-                return (
-                  <ConnectionLine
-                    key={conn.id}
-                    fromCard={fromCard}
-                    toCard={toCard}
-                    connection={conn}
-                    isSelected={selectedConnections.has(conn.id)}
-                    onClick={() => {
-                      // Selecionar conexão com clique
-                      setSelectedConnections(new Set([conn.id]));
-                    }}
-                  />
-                );
-              }
-              return null;
+            {connections.map((conn: Connection) => {
+              const fromCard = cards.find((c: CardType) => c.id === conn.fromCard);
+              const toCard = cards.find((c: CardType) => c.id === conn.toCard);
+
+              if (!fromCard || !toCard) return null;
+
+              return (
+                <ConnectionLine
+                  key={conn.id}
+                  fromCard={fromCard}
+                  toCard={toCard}
+                  connection={conn}
+                  isSelected={selectedConnections.has(conn.id)}
+                  onClick={() => {
+                    setSelectedConnections(new Set([conn.id]));
+                  }}
+                />
+              );
             })}
 
+            {/* LINHA TEMPORÁRIA CORRIGIDA */}
             {isConnecting && connectionStart && tempConnectionEnd && (
               <line
-                x1={connectionStart.point.x - offset.x / scale}
-                y1={connectionStart.point.y - offset.y / scale}
+                x1={connectionStart.point.x}
+                y1={connectionStart.point.y}
                 x2={tempConnectionEnd.x}
                 y2={tempConnectionEnd.y}
                 stroke={connectionColor}
                 strokeWidth="2"
-                strokeDasharray={connectionType === 'dashed' ? '5,5' : connectionType === 'dotted' ? '2,2' : 'none'}
+                strokeDasharray={
+                  connectionType === 'dashed'
+                    ? '6,4'
+                    : connectionType === 'dotted'
+                    ? '2,4'
+                    : undefined
+                }
               />
             )}
           </svg>
 
-          {/* Cards */}
-          {cards.map(card => (
-            <Card
-              key={card.id}
-              card={card}
-              isSelected={selectedCards.has(card.id)}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (e.ctrlKey) {
-                  setSelectedCards(prev => {
-                    const updated = new Set(prev);
-                    if (updated.has(card.id)) {
-                      updated.delete(card.id);
-                    } else {
-                      updated.add(card.id);
-                    }
-                    return updated;
-                  });
-                } else {
-                  setSelectedCards(new Set([card.id]));
-                  setSelectedConnections(new Set());
-                }
-              }}
-              onDragStart={(e) => handleCardDragStart(card.id, e)}
-              onUpdate={(updates) => updateCard(card.id, updates)}
-              onConnectionStart={(point) => handleConnectionStart(card.id, point)}
-              onConnectionEnd={(targetCardId) => {
-                if (connectionStart && targetCardId !== connectionStart.cardId) {
-                  createConnection(
-                    connectionStart.cardId, 
-                    targetCardId,
-                    connectionType,
-                    connectionColor
-                  );
-                }
-                cancelConnection();
-              }}
-            />
-          ))}
+          {/* Cards - COM Z-INDEX MAIOR AINDA */}
+          <div style={{ position: 'relative', zIndex: 20 }}>
+            {cards.map((card: CardType) => (
+              <Card
+                key={card.id}
+                card={card}
+                isSelected={selectedCards.has(card.id)}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  if (e.ctrlKey) {
+                    setSelectedCards((prev: Set<string>) => {
+                      const updated = new Set(prev);
+                      if (updated.has(card.id)) {
+                        updated.delete(card.id);
+                      } else {
+                        updated.add(card.id);
+                      }
+                      return updated;
+                    });
+                  } else {
+                    setSelectedCards(new Set([card.id]));
+                    setSelectedConnections(new Set());
+                  }
+                }}
+                onDragStart={(e: React.MouseEvent) => handleCardDragStart(card.id, e)}
+                onUpdate={(updates: Partial<CardType>) => updateCard(card.id, updates)}
+                onConnectionStart={(point: Point) => handleConnectionStart(card.id, point)}
+                onConnectionEnd={(targetCardId: string) => {
+                  if (connectionStart && targetCardId !== connectionStart.cardId) {
+                    createConnection(
+                      connectionStart.cardId, 
+                      targetCardId,
+                      connectionType,
+                      connectionColor
+                    );
+                  }
+                  cancelConnection();
+                }}
+              />
+            ))}
+          </div>
 
-          {/* Caixa de seleção */}
+          {/* Caixa de seleção - COM Z-INDEX MAIOR */}
           {isDragging && (
-            <SelectionBox
-              start={dragStart}
-              end={dragEnd}
-            />
+            <div style={{ position: 'relative', zIndex: 30 }}>
+              <SelectionBox
+                start={dragStart}
+                end={dragEnd}
+              />
+            </div>
           )}
         </div>
       </div>
