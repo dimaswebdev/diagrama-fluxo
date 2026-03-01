@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React from 'react';
 import {
@@ -28,8 +28,7 @@ interface FloatingToolbarProps {
   onRedo: () => void;
   onPrint: () => void;
   onNewFile: () => void;
-
-  onEdit: () => void; // 🔥 ADICIONE ISSO
+  onEdit: () => void;
 
   canUndo: boolean;
   canRedo: boolean;
@@ -38,8 +37,8 @@ interface FloatingToolbarProps {
   connectionType: ConnectionType;
   onConnectionTypeChange: (type: ConnectionType) => void;
 
-  connectionColor: string;
-  onConnectionColorChange: (color: string) => void;
+  cardColor: string;
+  onCardColorChange: (color: string) => void;
 
   showGrid: boolean;
   onShowGridChange: (show: boolean) => void;
@@ -54,16 +53,34 @@ interface FloatingToolbarProps {
 }
 
 const iconBtnBase =
-  'inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors border border-transparent';
+  'inline-flex items-center justify-center h-9 w-9 rounded-lg transition-all border border-transparent';
 
 const iconBtnEnabled =
   'hover:bg-gray-100 active:bg-gray-200 text-gray-700';
 
 const iconBtnDisabled =
-  'opacity-40 cursor-not-allowed text-gray-500';
+  'opacity-40 cursor-not-allowed text-gray-400';
 
 const iconBtnActive =
-  'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100';
+  'bg-indigo-100 text-indigo-700 border-indigo-200';
+
+const CARD_COLORS = [
+  '#9ED6F0',
+  '#19B7C6',
+  '#0B8CA6',
+  '#0C3E52',
+  '#F4B53A',
+  '#F39A1F',
+  '#F07B1A',
+  '#FF6B6B',
+  '#7C5CFF',
+  '#2DD4BF',
+  '#F59E0B',
+  '#60A5FA',
+  '#34D399',
+  '#A78BFA',
+  '#111827'
+];
 
 const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onAddCard,
@@ -78,8 +95,8 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   hasSelection,
   connectionType,
   onConnectionTypeChange,
-  connectionColor,
-  onConnectionColorChange,
+  cardColor,
+  onCardColorChange,
   showGrid,
   onShowGridChange,
   snapToGrid,
@@ -89,23 +106,6 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onZoomOut,
   onZoomReset
 }) => {
-  const colors = [
-    '#9ED6F0',
-    '#19B7C6',
-    '#0B8CA6',
-    '#0C3E52',
-    '#F4B53A',
-    '#F39A1F',
-    '#F07B1A',
-    '#FF6B6B',
-    '#7C5CFF',
-    '#2DD4BF',
-    '#F59E0B',
-    '#60A5FA',
-    '#34D399',
-    '#A78BFA',
-    '#111827'
-  ];
 
   const cardTypes: { type: CardType; label: string; Icon: React.ElementType }[] = [
     { type: 'default', label: 'Normal', Icon: Square },
@@ -117,13 +117,14 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
   return (
     <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 px-2 py-2 flex items-center gap-2">
-        {/* Arquivo */}
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 px-3 py-2 flex items-center gap-3">
+
+        {/* ARQUIVO */}
+        <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
           <button
             onClick={onNewFile}
             className={`${iconBtnBase} ${iconBtnEnabled}`}
-            title="Novo (Ctrl+N)"
+            title="Novo"
           >
             <FilePlus2 className="w-5 h-5" />
           </button>
@@ -131,61 +132,57 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           <button
             onClick={onPrint}
             className={`${iconBtnBase} ${iconBtnEnabled}`}
-            title="Exportar PDF (Ctrl+P)"
+            title="Exportar PDF"
           >
             <Printer className="w-5 h-5" />
           </button>
         </div>
 
-          {/* Editar */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <button
-              onClick={onUndo}
-              disabled={!canUndo}
-              className={`${iconBtnBase} ${canUndo ? iconBtnEnabled : iconBtnDisabled}`}
-              title="Desfazer (Ctrl+Z)"
-            >
-              <Undo2 className="w-5 h-5" />
-            </button>
+        {/* EDIÇÃO */}
+        <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className={`${iconBtnBase} ${canUndo ? iconBtnEnabled : iconBtnDisabled}`}
+            title="Desfazer"
+          >
+            <Undo2 className="w-5 h-5" />
+          </button>
 
-            <button
-              onClick={onRedo}
-              disabled={!canRedo}
-              className={`${iconBtnBase} ${canRedo ? iconBtnEnabled : iconBtnDisabled}`}
-              title="Refazer (Ctrl+Y)"
-            >
-              <Redo2 className="w-5 h-5" />
-            </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`${iconBtnBase} ${canRedo ? iconBtnEnabled : iconBtnDisabled}`}
+            title="Refazer"
+          >
+            <Redo2 className="w-5 h-5" />
+          </button>
 
-            <button
-              onClick={onEdit}
-              disabled={!hasSelection}
-              className={`${iconBtnBase} ${
-                hasSelection
-                  ? 'hover:bg-indigo-50 active:bg-indigo-100 text-indigo-600'
-                  : iconBtnDisabled
-              }`}
-              title="Editar Card"
-            >
-              <PencilRuler className="w-5 h-5" />
-            </button>
+          <button
+            onClick={onEdit}
+            disabled={!hasSelection}
+            className={`${iconBtnBase} ${
+              hasSelection ? 'hover:bg-indigo-50 text-indigo-600' : iconBtnDisabled
+            }`}
+            title="Editar Card"
+          >
+            <PencilRuler className="w-5 h-5" />
+          </button>
 
-            <button
-              onClick={onDelete}
-              disabled={!hasSelection}
-              className={`${iconBtnBase} ${
-                hasSelection
-                  ? 'hover:bg-red-50 active:bg-red-100 text-red-600'
-                  : iconBtnDisabled
-              }`}
-              title="Excluir"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onDelete}
+            disabled={!hasSelection}
+            className={`${iconBtnBase} ${
+              hasSelection ? 'hover:bg-red-50 text-red-600' : iconBtnDisabled
+            }`}
+            title="Excluir"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
 
-        {/* Cards */}
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+        {/* TIPOS DE CARD */}
+        <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
           {cardTypes.map(({ type, label, Icon }) => (
             <button
               key={type}
@@ -198,47 +195,25 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           ))}
         </div>
 
-        {/* Conexões */}
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-          <button
-            onClick={() => onConnectionTypeChange('normal')}
-            className={`${iconBtnBase} ${connectionType === 'normal' ? iconBtnActive : iconBtnEnabled}`}
-            title="Linha normal"
-          >
-            <span className="text-[18px] leading-none">—</span>
-          </button>
-          <button
-            onClick={() => onConnectionTypeChange('dashed')}
-            className={`${iconBtnBase} ${connectionType === 'dashed' ? iconBtnActive : iconBtnEnabled}`}
-            title="Linha tracejada"
-          >
-            <span className="text-[18px] leading-none">– –</span>
-          </button>
-          <button
-            onClick={() => onConnectionTypeChange('dotted')}
-            className={`${iconBtnBase} ${connectionType === 'dotted' ? iconBtnActive : iconBtnEnabled}`}
-            title="Linha pontilhada"
-          >
-            <span className="text-[18px] leading-none">···</span>
-          </button>
-
-          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-gray-200">
-            {colors.map((color) => (
-              <button
-                key={color}
-                onClick={() => onConnectionColorChange(color)}
-                className={`w-7 h-7 rounded-full border-2 transition-all ${
-                  connectionColor === color ? 'border-gray-700 scale-110' : 'border-transparent hover:scale-110'
-                }`}
-                style={{ backgroundColor: color }}
-                title={`Cor: ${color}`}
-              />
-            ))}
-          </div>
+        {/* COR DO CARD */}
+        <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
+          {CARD_COLORS.map((color) => (
+            <button
+              key={color}
+              onClick={() => onCardColorChange(color)}
+              className={`w-7 h-7 rounded-full border-2 transition-all ${
+                cardColor === color
+                  ? 'border-gray-800 scale-110'
+                  : 'border-transparent hover:scale-110'
+              }`}
+              style={{ backgroundColor: color }}
+              title={`Cor: ${color}`}
+            />
+          ))}
         </div>
 
-        {/* Grid */}
-        <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+        {/* GRID */}
+        <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
           <button
             onClick={() => onShowGridChange(!showGrid)}
             className={`${iconBtnBase} ${showGrid ? iconBtnActive : iconBtnEnabled}`}
@@ -256,7 +231,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           </button>
         </div>
 
-        {/* Zoom */}
+        {/* ZOOM */}
         <div className="flex items-center gap-1">
           <button
             onClick={onZoomOut}
@@ -268,7 +243,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
           <button
             onClick={onZoomReset}
-            className="h-9 px-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-sm font-medium text-gray-700"
+            className="h-9 px-2 rounded-lg hover:bg-gray-100 text-sm font-medium text-gray-700"
             title="Reset zoom"
           >
             {Math.round(scale * 100)}%
@@ -282,6 +257,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             <Plus className="w-5 h-5" />
           </button>
         </div>
+
       </div>
     </div>
   );

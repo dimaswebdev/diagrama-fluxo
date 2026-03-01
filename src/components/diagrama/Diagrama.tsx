@@ -531,6 +531,27 @@ const Diagrama: React.FC = () => {
     return usedNumbers.length + 1;
   };
 
+  const CARD_COLORS = [
+    '#9ED6F0',
+    '#19B7C6',
+    '#0B8CA6',
+    '#0C3E52',
+    '#F4B53A',
+    '#F39A1F',
+    '#F07B1A',
+    '#FF6B6B',
+    '#7C5CFF',
+    '#2DD4BF',
+    '#F59E0B',
+    '#60A5FA',
+    '#34D399',
+    '#A78BFA',
+    '#111827'
+  ];
+  
+  const getRandomColor = () =>
+    CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)];
+
   const addCard = (type: CardTypeEnum = 'default'): void => {
     saveToHistory();
   
@@ -557,7 +578,7 @@ const Diagrama: React.FC = () => {
       label: "NOVO",
       date: new Date().toLocaleDateString("pt-BR"),
       source: "",
-      accent: "#7C5CFF",
+      accent: getRandomColor(),
   
       type
     };
@@ -612,8 +633,18 @@ const Diagrama: React.FC = () => {
         hasSelection={selectedCards.size === 1}
         connectionType={connectionType}
         onConnectionTypeChange={setConnectionType}
-        connectionColor={connectionColor}
-        onConnectionColorChange={setConnectionColor}
+        cardColor={
+          selectedCards.size === 1
+            ? cards.find(c => c.id === Array.from(selectedCards)[0])?.accent || '#000'
+            : '#000'
+        }
+        onCardColorChange={(color) => {
+          if (selectedCards.size === 1) {
+            const id = Array.from(selectedCards)[0];
+            updateCard(id, { accent: color });
+            saveToHistory();
+          }
+        }}
         showGrid={showGrid}
         onShowGridChange={setShowGrid}
         snapToGrid={snapToGrid}
