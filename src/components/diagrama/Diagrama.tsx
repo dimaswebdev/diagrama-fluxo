@@ -607,20 +607,21 @@ const Diagrama: React.FC = () => {
                   width: '100%',
                   height: '100%',
                   zIndex: 5,
+                  pointerEvents: 'auto',
                 }}
               >
                 <defs>
                   <marker
-                    id="arrow"
+                    id="arrow-head"
                     viewBox="0 0 10 10"
-                    refX="8"
+                    refX="9"
                     refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
+                    markerWidth="7"
+                    markerHeight="7"
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
-                    <path d="M0 0 L10 5 L0 10 z" fill={connectionColor} />
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
                   </marker>
                 </defs>
 

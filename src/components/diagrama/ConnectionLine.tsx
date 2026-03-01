@@ -1,140 +1,120 @@
-'use client'
+'use client';
 
 import React from 'react';
+import type { Card as CardType, Connection, ConnectionType } from '@/types/diagrama';
 
 type Side = 'top' | 'right' | 'bottom' | 'left';
 
 interface ConnectionLineProps {
-  fromCard: { x: number; y: number; width: number; height: number };
-  toCard: { x: number; y: number; width: number; height: number };
-  connection: {
-    type?: 'normal' | 'dashed' | 'dotted';
-    color?: string;
-    label?: string;
-    fromSide?: Side;
-    toSide?: Side;
-  };
+  fromCard: CardType;
+  toCard: CardType;
+  connection: Connection;
   isSelected?: boolean;
-  onClick?: (e: React.MouseEvent<SVGGElement>) => void;
+  onClick?: (e: React.MouseEvent<SVGGElement, MouseEvent>) => void;
+
+  // opcional: pra ajustar espessura quando estiver dando zoom
+  zoom?: number;
 }
 
-const ConnectionLine: React.FC<ConnectionLineProps> = ({
+function getPoint(card: CardType, side: Side) {
+  switch (side) {
+    case 'top':
+      return { x: card.x + card.width / 2, y: card.y };
+    case 'bottom':
+      return { x: card.x + card.width / 2, y: card.y + card.height };
+    case 'left':
+      return { x: card.x, y: card.y + card.height / 2 };
+    case 'right':
+    default:
+      return { x: card.x + card.width, y: card.y + card.height / 2 };
+  }
+}
+
+function dashArray(type?: ConnectionType) {
+  switch (type) {
+    case 'dashed':
+      return '6,4';
+    case 'dotted':
+      return '2,4';
+    default:
+      return undefined;
+  }
+}
+
+export default function ConnectionLine({
   fromCard,
   toCard,
   connection,
-  isSelected = false,
-  onClick
-}) => {
+  isSelected,
+  onClick,
+  zoom = 1,
+}: ConnectionLineProps) {
+  // 🔥 fallback: se não vier lado salvo, assume right->left
+  const fromSide: Side = (connection.fromSide as Side) ?? 'right';
+  const toSide: Side = (connection.toSide as Side) ?? 'left';
 
-  const getPoint = (card: typeof fromCard, side: Side) => {
-    switch (side) {
-      case 'top':
-        return { x: card.x + card.width / 2, y: card.y };
-      case 'bottom':
-        return { x: card.x + card.width / 2, y: card.y + card.height };
-      case 'left':
-        return { x: card.x, y: card.y + card.height / 2 };
-      case 'right':
-        return { x: card.x + card.width, y: card.y + card.height / 2 };
-    }
-  };
+  // ✅ recalcula SEMPRE a partir do estado atual dos cards
+  const startPoint = getPoint(fromCard, fromSide);
+  const endPoint = getPoint(toCard, toSide);
 
-  // 🔹 Compatibilidade com conexões antigas
-  const safeFromSide: Side = connection.fromSide ?? 'right';
-  const safeToSide: Side = connection.toSide ?? 'left';
-
-  const startPoint = getPoint(fromCard, safeFromSide);
-  const endPoint = getPoint(toCard, safeToSide);
-
+  // proteção extra
   if (!startPoint || !endPoint) return null;
 
   const midX = (startPoint.x + endPoint.x) / 2;
-  const midY = (startPoint.y + endPoint.y) / 2;
 
+  // curva bezier simples e estável
   const controlPoint1 = { x: midX, y: startPoint.y };
   const controlPoint2 = { x: midX, y: endPoint.y };
 
-  const path = `
-    M ${startPoint.x} ${startPoint.y}
-    C ${controlPoint1.x} ${controlPoint1.y},
-      ${controlPoint2.x} ${controlPoint2.y},
-      ${endPoint.x} ${endPoint.y}
-  `;
+  const path = `M ${startPoint.x} ${startPoint.y}
+                C ${controlPoint1.x} ${controlPoint1.y},
+                  ${controlPoint2.x} ${controlPoint2.y},
+                  ${endPoint.x} ${endPoint.y}`;
 
-  const dx = 3 * (endPoint.x - controlPoint2.x);
-  const dy = 3 * (endPoint.y - controlPoint2.y);
-  const arrowAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+  // cor da linha (selecionada ganha destaque)
+  const strokeColor = connection.color || (isSelected ? '#2563eb' : '#94a3b8');
 
-  const getDashArray = () => {
-    switch (connection.type) {
-      case 'dashed': return '6,4';
-      case 'dotted': return '2,4';
-      default: return undefined;
-    }
-  };
-
-  const strokeColor =
-    connection.color ||
-    (isSelected ? '#2563eb' : '#94a3b8');
+  // espessuras “world-friendly” no zoom (hit area e stroke)
+  const strokeWidth = (isSelected ? 3 : 2) / zoom;
+  const hitWidth = 14 / zoom;
 
   return (
     <g
       className="connection-line"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick?.(e);
-      }}
-      style={{
-        cursor: 'pointer',
-        pointerEvents: 'all'
-      }}
+      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()} // não deixa o canvas iniciar selection box
+      style={{ cursor: 'pointer', pointerEvents: 'all', color: strokeColor }} // <-- "color" alimenta currentColor do marker
     >
-      {/* 🔹 Área invisível para clique confortável */}
+      {/* Hit area (clicável) */}
       <path
         d={path}
         fill="none"
         stroke="transparent"
-        strokeWidth="14"
+        strokeWidth={hitWidth}
         strokeLinecap="round"
+        pointerEvents="stroke"
       />
 
-      {/* 🔹 Linha principal */}
+      {/* Linha visível */}
       <path
         d={path}
         fill="none"
         stroke={strokeColor}
-        strokeWidth={isSelected ? 4 : 2}
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
-        strokeDasharray={getDashArray()}
-        style={{
-          transition: 'all 0.15s ease',
-          filter: isSelected
-            ? 'drop-shadow(0 0 4px #2563eb)'
-            : 'none'
-        }}
+        strokeDasharray={dashArray(connection.type)}
+        markerEnd="url(#arrow-head)"
+        pointerEvents="none"
       />
 
-      {/* 🔹 Seta */}
-      <polygon
-        points={`
-          ${endPoint.x},${endPoint.y}
-          ${endPoint.x - 10},${endPoint.y - 5}
-          ${endPoint.x - 10},${endPoint.y + 5}
-        `}
-        fill={strokeColor}
-        transform={`rotate(${arrowAngle}, ${endPoint.x}, ${endPoint.y})`}
-        style={{
-          transition: 'all 0.15s ease'
-        }}
-      />
-
-      {/* 🔹 Label opcional */}
+      {/* Label opcional */}
       {connection.label && (
         <text
-          x={midX}
-          y={midY - 10}
+          x={(startPoint.x + endPoint.x) / 2}
+          y={(startPoint.y + endPoint.y) / 2 - 8 / zoom}
           textAnchor="middle"
-          className="text-xs fill-gray-600 select-none"
+          className="select-none"
+          style={{ fontSize: 12 / zoom, fill: '#4b5563' }}
           pointerEvents="none"
         >
           {connection.label}
@@ -142,6 +122,4 @@ const ConnectionLine: React.FC<ConnectionLineProps> = ({
       )}
     </g>
   );
-};
-
-export default ConnectionLine;
+}
