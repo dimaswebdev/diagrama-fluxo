@@ -621,7 +621,7 @@ const Diagrama: React.FC = () => {
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
-                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                    <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
                   </marker>
                 </defs>
 
