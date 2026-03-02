@@ -517,6 +517,29 @@ const Diagrama: React.FC = () => {
     );
   };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+  
+    const zoomIntensity = 0.001;
+    const delta = -e.deltaY * zoomIntensity;
+  
+    const newScale = Math.min(Math.max(0.1, scale + delta), 5);
+  
+    const rect = diagramRef.current!.getBoundingClientRect();
+  
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+  
+    const worldX = (mouseX - offset.x) / scale;
+    const worldY = (mouseY - offset.y) / scale;
+  
+    const newOffsetX = mouseX - worldX * newScale;
+    const newOffsetY = mouseY - worldY * newScale;
+  
+    setScale(newScale);
+    setOffset({ x: newOffsetX, y: newOffsetY });
+  };
+
   const getNextSequenceNumber = (): number => {
     const usedNumbers = cards
       .map(card => card.sequence)
