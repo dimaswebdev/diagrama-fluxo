@@ -419,62 +419,75 @@ const Diagrama: React.FC = () => {
       return getBoundsForCards(selected, 60);
     };
 
-    const exportFitA4 = async (mode: ExportMode): Promise<void> => {
+    const exportMultipageA4 = async (mode: ExportMode): Promise<void> => {
       if (!diagramRef.current) return;
-
+    
       const bounds = mode === 'selection'
         ? getBoundsSelection()
         : getBoundsAll();
-
+    
       if (!bounds) return;
-
+    
       const originalScale = scale;
       const originalOffset = offset;
-
-      const ratio = Math.min(
-        A4_WIDTH / bounds.width,
-        A4_HEIGHT / bounds.height
-      );
-
-      const contentW = bounds.width * ratio;
-      const contentH = bounds.height * ratio;
-
-      const padX = (A4_WIDTH - contentW) / 2;
-      const padY = (A4_HEIGHT - contentH) / 2;
-
-      setScale(ratio);
-      setOffset({
-        x: -bounds.x * ratio + padX,
-        y: -bounds.y * ratio + padY,
-      });
-
-      await new Promise(r => setTimeout(r, 120));
-
-      const canvas = await html2canvas(diagramRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
-      });
-
-      // restaura
-      setScale(originalScale);
-      setOffset(originalOffset);
-
+    
+      // 🔥 Escala fixa de exportação (não reduz)
+      const exportScale = 1;
+    
+      const pageWorldWidth = A4_WIDTH / exportScale;
+      const pageWorldHeight = A4_HEIGHT / exportScale;
+    
+      const cols = Math.ceil(bounds.width / pageWorldWidth);
+      const rows = Math.ceil(bounds.height / pageWorldHeight);
+    
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'px',
         format: [A4_WIDTH, A4_HEIGHT],
       });
-
-      pdf.addImage(
-        canvas.toDataURL('image/png'),
-        'PNG',
-        0,
-        0,
-        A4_WIDTH,
-        A4_HEIGHT
-      );
-
+    
+      let pageIndex = 0;
+    
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const pageX = bounds.x + col * pageWorldWidth;
+          const pageY = bounds.y + row * pageWorldHeight;
+    
+          setScale(exportScale);
+          setOffset({
+            x: -pageX * exportScale,
+            y: -pageY * exportScale,
+          });
+    
+          await new Promise(res => setTimeout(res, 120));
+    
+          const canvas = await html2canvas(diagramRef.current, {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            useCORS: true
+          });
+    
+          if (pageIndex > 0) {
+            pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+          }
+    
+          pdf.addImage(
+            canvas.toDataURL('image/png'),
+            'PNG',
+            0,
+            0,
+            A4_WIDTH,
+            A4_HEIGHT
+          );
+    
+          pageIndex++;
+        }
+      }
+    
+      // restaura estado
+      setScale(originalScale);
+      setOffset(originalOffset);
+    
       pdf.save(`${fileName}.pdf`);
     };
 
@@ -528,7 +541,7 @@ const Diagrama: React.FC = () => {
 
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
-        exportFitA4('all');
+        exportMultipageA4('all');
         return;
       }
 
@@ -857,7 +870,7 @@ const Diagrama: React.FC = () => {
         onDelete={deleteSelected}
         onUndo={undo}
         onRedo={redo}
-        onPrint={() => exportFitA4('all')}
+        onPrint={() => exportMultipageA4('all')}
         onNewFile={handleNewFile}
         onEdit={() => {
           if (selectedCards.size === 1) {
