@@ -54,6 +54,8 @@ const Diagrama: React.FC = () => {
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [isMiddleZooming, setIsMiddleZooming] = useState(false);
+
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
   
   const {
