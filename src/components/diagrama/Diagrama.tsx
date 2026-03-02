@@ -236,6 +236,12 @@ const Diagrama: React.FC = () => {
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
 
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsMiddleZooming(false);
+      return;
+    }
+
     // 🖱️ PAN (botão do meio ou ALT + clique)
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
@@ -281,6 +287,30 @@ const Diagrama: React.FC = () => {
 
     const worldX = (e.clientX - rect.left - offset.x) / scale;
     const worldY = (e.clientY - rect.top - offset.y) / scale;
+
+    if (isMiddleZooming) {
+      const zoomIntensity = 0.005;
+    
+      const delta = -e.movementY * zoomIntensity;
+    
+      const newScale = Math.min(Math.max(0.1, scale + delta), 5);
+    
+      const rect = diagramRef.current!.getBoundingClientRect();
+    
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+    
+      const worldX = (mouseX - offset.x) / scale;
+      const worldY = (mouseY - offset.y) / scale;
+    
+      const newOffsetX = mouseX - worldX * newScale;
+      const newOffsetY = mouseY - worldY * newScale;
+    
+      setScale(newScale);
+      setOffset({ x: newOffsetX, y: newOffsetY });
+    
+      return;
+    }
 
     if (isPanning) {
       setOffset({
