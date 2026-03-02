@@ -655,67 +655,84 @@ const Diagrama: React.FC = () => {
         onZoomReset={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
       />
 
-      {/* Área do diagrama */}
-      <div
-        ref={diagramRef}
-        data-diagram-canvas
-        className={`flex-1 relative overflow-hidden select-none ${
-          isPanning ? 'cursor-grabbing' : isConnecting ? 'cursor-crosshair' : 'cursor-default'
-        }`}
-        style={{
-          backgroundColor: '#f9fafb',
-          backgroundImage: showGrid ? `
-            linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-            linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-          ` : 'none',
-          backgroundSize: `${GRID_SIZE * scale}px ${GRID_SIZE * scale}px`,
-          backgroundPosition: `${offset.x % (GRID_SIZE * scale)}px ${offset.y % (GRID_SIZE * scale)}px`
-        }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
-          setIsDragging(false);
-          setIsPanning(false);
-          cancelConnection();
-        }}
-      >
-        {/* Área de trabalho (sem o fundo branco fixo) */}
+     {/* Área do diagrama */}
         <div
-          className="absolute"
+          ref={diagramRef}
+          data-diagram-canvas
+          className={`flex-1 relative overflow-hidden select-none ${
+            isPanning
+              ? 'cursor-grabbing'
+              : isConnecting
+              ? 'cursor-crosshair'
+              : 'cursor-default'
+          }`}
           style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-            transformOrigin: '0 0',
-            minWidth: 4000,
-            minHeight: 4000,
-            backgroundColor: 'transparent',
-            position: 'relative'
+            backgroundColor: '#f9fafb',
+
+            //  GRID INFINITO CORRETO
+            backgroundImage: showGrid
+              ? `
+                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+              `
+              : 'none',
+
+            backgroundSize: `${GRID_SIZE * scale}px ${GRID_SIZE * scale}px`,
+
+            //  alinhamento matemático correto do grid
+            backgroundPosition: `
+              ${offset.x % (GRID_SIZE * scale)}px 
+              ${offset.y % (GRID_SIZE * scale)}px
+            `,
+          }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => {
+            setIsDragging(false);
+            setIsPanning(false);
+            cancelConnection();
           }}
         >
-          {/* SVG GLOBAL DE CONEXÕES */}
-          <svg
+          {/* Camada transformável (mundo virtual) */}
+          <div
             className="absolute inset-0"
             style={{
-              width: '100%',
-              height: '100%',
-              zIndex: 5,
-              pointerEvents: 'auto',
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: '0 0',
+              willChange: 'transform', // 🔥 performance suave
             }}
           >
-            <defs>
-              <marker
-                id="arrow-head"
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto"
-                markerUnits="strokeWidth"
-              >
-                <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
-              </marker>
-            </defs>
+            {/* SVG GLOBAL DE CONEXÕES — NUNCA CLIPADO */}
+            <svg
+              className="absolute inset-0"
+              viewBox={`
+                ${-offset.x / scale}
+                ${-offset.y / scale}
+                ${diagramRef.current?.clientWidth! / scale}
+                ${diagramRef.current?.clientHeight! / scale}
+              `}
+              preserveAspectRatio="none"
+              style={{
+                overflow: 'visible',      
+                pointerEvents: 'none',    
+                zIndex: 5,
+              }}
+            >
+              <defs>
+                <marker
+                  id="arrow-head"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
+                </marker>
+              </defs>
 
             {/* Conexões existentes */}
             {connections.map((conn: Connection) => {
