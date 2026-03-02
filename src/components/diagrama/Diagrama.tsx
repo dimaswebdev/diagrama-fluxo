@@ -658,6 +658,7 @@ const Diagrama: React.FC = () => {
       {/* Área do diagrama */}
       <div
         ref={diagramRef}
+        data-diagram-canvas
         className={`flex-1 relative overflow-hidden select-none ${
           isPanning ? 'cursor-grabbing' : isConnecting ? 'cursor-crosshair' : 'cursor-default'
         }`}
@@ -783,6 +784,8 @@ const Diagrama: React.FC = () => {
               <Card
                 key={card.id}
                 card={card}
+                scale={scale}
+                offset={offset}
                 isSelected={selectedCards.has(card.id)}
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();

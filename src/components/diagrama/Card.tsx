@@ -5,6 +5,8 @@ import { Card as CardType, Point } from '@/types/diagrama';
 
 interface CardProps {
   card: CardType;
+  scale: number; 
+  offset: { x: number; y: number };
   isSelected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDragStart: (e: React.MouseEvent) => void;
@@ -15,6 +17,8 @@ interface CardProps {
 
 const Card: React.FC<CardProps> = ({
   card,
+  scale,
+  offset,
   isSelected,
   onClick,
   onDragStart,
@@ -112,16 +116,23 @@ const Card: React.FC<CardProps> = ({
             style={styleMap[side]}
             onMouseDown={(e) => {
               e.stopPropagation();
-              e.preventDefault(); // 🔥 impede seleção de texto
+              e.preventDefault();
             
               const rect = e.currentTarget.getBoundingClientRect();
             
-              const point: Point = {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-              };
+              const canvasRect = (e.currentTarget
+                .closest('[data-diagram-canvas]') as HTMLElement)
+                ?.getBoundingClientRect();
             
-              onConnectionStart(point);
+              if (!canvasRect) return;
+            
+              const x =
+                (rect.left + rect.width / 2 - canvasRect.left - offset.x) / scale;
+            
+              const y =
+                (rect.top + rect.height / 2 - canvasRect.top - offset.y) / scale;
+            
+              onConnectionStart({ x, y });
             }}
           />
         );
