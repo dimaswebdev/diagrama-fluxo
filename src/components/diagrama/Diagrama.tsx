@@ -730,16 +730,9 @@ const Diagrama: React.FC = () => {
             {/* SVG GLOBAL DE CONEXÕES — NUNCA CLIPADO */}
             <svg
               className="absolute inset-0"
-              viewBox={`
-                ${-offset.x / scale}
-                ${-offset.y / scale}
-                ${diagramRef.current?.clientWidth! / scale}
-                ${diagramRef.current?.clientHeight! / scale}
-              `}
-              preserveAspectRatio="none"
               style={{
-                overflow: 'visible',      
-                pointerEvents: 'none',    
+                overflow: 'visible',
+                pointerEvents: 'none',
                 zIndex: 5,
               }}
             >
