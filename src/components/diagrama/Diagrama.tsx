@@ -659,6 +659,7 @@ const Diagrama: React.FC = () => {
         <div
           ref={diagramRef}
           data-diagram-canvas
+          onWheel={handleWheel}
           className={`flex-1 relative overflow-hidden select-none ${
             isPanning
               ? 'cursor-grabbing'
