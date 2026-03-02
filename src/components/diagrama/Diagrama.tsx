@@ -658,7 +658,7 @@ const Diagrama: React.FC = () => {
       {/* Área do diagrama */}
       <div
         ref={diagramRef}
-        className={`flex-1 relative overflow-hidden ${
+        className={`flex-1 relative overflow-hidden select-none ${
           isPanning ? 'cursor-grabbing' : isConnecting ? 'cursor-crosshair' : 'cursor-default'
         }`}
         style={{
@@ -762,7 +762,8 @@ const Diagrama: React.FC = () => {
                 x2={tempConnectionEnd.x}
                 y2={tempConnectionEnd.y}
                 stroke={connectionColor}
-                strokeWidth={2 / scale}
+                strokeWidth={2}
+                vectorEffect="non-scaling-stroke"
                 strokeDasharray={
                   connectionType === 'dashed'
                     ? '6,4'

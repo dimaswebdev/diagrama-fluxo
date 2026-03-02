@@ -22,7 +22,7 @@ const Card: React.FC<CardProps> = ({
 }) => {
   return (
     <div
-      className="card absolute rounded-2xl shadow-md transition-all duration-200"
+      className="card absolute rounded-2xl shadow-md transition-all duration-200 select-none"
       style={{
         left: card.x,
         top: card.y,
@@ -112,13 +112,15 @@ const Card: React.FC<CardProps> = ({
             style={styleMap[side]}
             onMouseDown={(e) => {
               e.stopPropagation();
-              const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
-
+              e.preventDefault(); // 🔥 impede seleção de texto
+            
+              const rect = e.currentTarget.getBoundingClientRect();
+            
               const point: Point = {
                 x: rect.left + rect.width / 2,
                 y: rect.top + rect.height / 2,
               };
-
+            
               onConnectionStart(point);
             }}
           />
