@@ -4,7 +4,7 @@ type Side = 'left' | 'right' | 'top' | 'bottom';
 
 export type ExportSvgOptions = {
   includeGrid: boolean;
-  includeShadows: boolean; // mantido por compatibilidade, mas não usado no PDF
+  includeShadows: boolean;
   gridSize: number;
   background: string;
 };
@@ -35,6 +35,10 @@ function sidePoint(card: CardType, side: Side) {
   }
 }
 
+/**
+ * Agora retorna também cp1 (último ponto de controle),
+ * pois ele define a tangente final da curva.
+ */
 function bezierPath(
   p0: { x: number; y: number },
   p1: { x: number; y: number },
@@ -64,7 +68,10 @@ function bezierPath(
   const cp0 = { x: p0.x + c0d.x, y: p0.y + c0d.y };
   const cp1 = { x: p1.x + c1d.x, y: p1.y + c1d.y };
 
-  return `M ${p0.x} ${p0.y} C ${cp0.x} ${cp0.y} ${cp1.x} ${cp1.y} ${p1.x} ${p1.y}`;
+  return {
+    d: `M ${p0.x} ${p0.y} C ${cp0.x} ${cp0.y} ${cp1.x} ${cp1.y} ${p1.x} ${p1.y}`,
+    cp1,
+  };
 }
 
 function arrowHead(
@@ -115,7 +122,7 @@ export function buildExportSvg(params: {
 
   const vb = `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`;
 
-  // GRID ESTÁVEL (sem opacity em grupo)
+  // GRID ESTÁVEL
   const grid = opts.includeGrid
     ? (() => {
         const gs = Math.max(8, opts.gridSize);
@@ -149,8 +156,7 @@ export function buildExportSvg(params: {
     .map((c) => {
       const r = 18;
       const stroke = c.accent || '#2563eb';
-      const fillColor = stroke;
-      const fillOpacity = 0.13; // substitui hex 22
+      const fillOpacity = 0.13;
 
       const title = esc(c.title || '');
       const date = esc(c.date || '');
@@ -165,19 +171,17 @@ export function buildExportSvg(params: {
       const ty = c.y + 30;
 
       return `
-        <g class="card">
+        <g>
           <rect x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}"
             rx="${r}" ry="${r}"
-            fill="${fillColor}"
+            fill="${stroke}"
             fill-opacity="${fillOpacity}"
             stroke="${stroke}"
             stroke-width="2"
-            stroke-opacity="1"
           />
 
           <circle cx="${c.x + 26}" cy="${c.y + 26}" r="12"
             fill="${stroke}"
-            fill-opacity="1"
           />
 
           <text x="${c.x + 26}" y="${c.y + 30}" text-anchor="middle"
@@ -237,7 +241,7 @@ export function buildExportSvg(params: {
     })
     .join('');
 
-  // CONEXÕES
+  // CONEXÕES COM DIREÇÃO CORRETA
   const connSvg = connections
     .map((conn) => {
       const from = cards.find((x) => x.id === conn.fromCard);
@@ -250,12 +254,7 @@ export function buildExportSvg(params: {
       const p0 = sidePoint(from, fromSide);
       const p1 = sidePoint(to, toSide);
 
-      const d = bezierPath(p0, p1, fromSide, toSide);
-
-      const prev = {
-        x: p1.x + (toSide === 'left' ? 16 : toSide === 'right' ? -16 : 0),
-        y: p1.y + (toSide === 'top' ? 16 : toSide === 'bottom' ? -16 : 0),
-      };
+      const { d, cp1 } = bezierPath(p0, p1, fromSide, toSide);
 
       const stroke = conn.color || '#2563eb';
       const dash =
@@ -265,22 +264,19 @@ export function buildExportSvg(params: {
           ? '2 5'
           : '';
 
-      const poly = arrowHead(p1, prev, 10);
+      const poly = arrowHead(p1, cp1, 10);
 
       return `
-        <g class="conn">
+        <g>
           <path d="${d}"
             fill="none"
             stroke="${stroke}"
             stroke-width="2"
-            stroke-opacity="1"
             stroke-linecap="round"
             stroke-linejoin="round"
             ${dash ? `stroke-dasharray="${dash}"` : ''} />
           <polygon points="${poly}"
-            fill="${stroke}"
-            fill-opacity="1"
-          />
+            fill="${stroke}" />
         </g>
       `;
     })
