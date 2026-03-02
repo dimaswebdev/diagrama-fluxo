@@ -381,39 +381,102 @@ const Diagrama: React.FC = () => {
     setFileName('Diagrama sem título');
   }, [pushState, setCards, setConnections, setFileName]);
 
-  // Export PDF
-  const handlePrint = async (): Promise<void> => {
-    if (!diagramRef.current) return;
-  
-    try {
+      // ===============================
+    // EXPORTAÇÃO A4 AJUSTADA
+    // ===============================
+
+    type Bounds = { x: number; y: number; width: number; height: number };
+    type ExportMode = 'all' | 'selection';
+
+    const getBoundsForCards = (list: CardType[], padding = 40): Bounds | null => {
+      if (!list.length) return null;
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      list.forEach(card => {
+        minX = Math.min(minX, card.x);
+        minY = Math.min(minY, card.y);
+        maxX = Math.max(maxX, card.x + card.width);
+        maxY = Math.max(maxY, card.y + card.height);
+      });
+
+      return {
+        x: minX - padding,
+        y: minY - padding,
+        width: (maxX - minX) + padding * 2,
+        height: (maxY - minY) + padding * 2
+      };
+    };
+
+    const getBoundsAll = () => getBoundsForCards(cards, 60);
+
+    const getBoundsSelection = () => {
+      const ids = Array.from(selectedCards);
+      const selected = cards.filter(c => ids.includes(c.id));
+      return getBoundsForCards(selected, 60);
+    };
+
+    const exportFitA4 = async (mode: ExportMode): Promise<void> => {
+      if (!diagramRef.current) return;
+
+      const bounds = mode === 'selection'
+        ? getBoundsSelection()
+        : getBoundsAll();
+
+      if (!bounds) return;
+
+      const originalScale = scale;
+      const originalOffset = offset;
+
+      const ratio = Math.min(
+        A4_WIDTH / bounds.width,
+        A4_HEIGHT / bounds.height
+      );
+
+      const contentW = bounds.width * ratio;
+      const contentH = bounds.height * ratio;
+
+      const padX = (A4_WIDTH - contentW) / 2;
+      const padY = (A4_HEIGHT - contentH) / 2;
+
+      setScale(ratio);
+      setOffset({
+        x: -bounds.x * ratio + padX,
+        y: -bounds.y * ratio + padY,
+      });
+
+      await new Promise(r => setTimeout(r, 120));
+
       const canvas = await html2canvas(diagramRef.current, {
         scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true
       });
-  
-      const imgData = canvas.toDataURL('image/png');
-  
+
+      // restaura
+      setScale(originalScale);
+      setOffset(originalOffset);
+
       const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        orientation: 'portrait',
         unit: 'px',
-        format: [canvas.width, canvas.height]
+        format: [A4_WIDTH, A4_HEIGHT],
       });
-  
+
       pdf.addImage(
-        imgData,
+        canvas.toDataURL('image/png'),
         'PNG',
         0,
         0,
-        canvas.width,
-        canvas.height
+        A4_WIDTH,
+        A4_HEIGHT
       );
-  
+
       pdf.save(`${fileName}.pdf`);
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
-    }
-  };
+    };
 
   // Atalhos teclado
   useEffect(() => {
@@ -465,7 +528,7 @@ const Diagrama: React.FC = () => {
 
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
-        handlePrint();
+        exportFitA4('all');
         return;
       }
 
@@ -486,7 +549,6 @@ const Diagrama: React.FC = () => {
     cancelConnection,
     deleteSelected,
     handleNewFile,
-    handlePrint,
     isConnecting,
     redo,
     setCards,
@@ -795,7 +857,7 @@ const Diagrama: React.FC = () => {
         onDelete={deleteSelected}
         onUndo={undo}
         onRedo={redo}
-        onPrint={handlePrint}
+        onPrint={() => exportFitA4('all')}
         onNewFile={handleNewFile}
         onEdit={() => {
           if (selectedCards.size === 1) {
