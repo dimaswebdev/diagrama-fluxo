@@ -383,31 +383,31 @@ const Diagrama: React.FC = () => {
 
   // Export PDF
   const handlePrint = async (): Promise<void> => {
-    if (!worldRef.current) return;
+    if (!diagramRef.current) return;
   
     try {
-      // Temporariamente remove zoom/pan para exportar em escala 1
-      const originalTransform = worldRef.current.style.transform;
-      worldRef.current.style.transform = 'translate(0px, 0px) scale(1)';
-  
-      const canvas = await html2canvas(worldRef.current, {
+      const canvas = await html2canvas(diagramRef.current, {
         scale: 2,
         backgroundColor: '#ffffff',
-        width: A4_WIDTH,
-        height: A4_HEIGHT
+        useCORS: true
       });
-  
-      worldRef.current.style.transform = originalTransform;
   
       const imgData = canvas.toDataURL('image/png');
   
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
         unit: 'px',
-        format: [A4_WIDTH, A4_HEIGHT]
+        format: [canvas.width, canvas.height]
       });
   
-      pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
+      pdf.addImage(
+        imgData,
+        'PNG',
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
   
       pdf.save(`${fileName}.pdf`);
     } catch (error) {
