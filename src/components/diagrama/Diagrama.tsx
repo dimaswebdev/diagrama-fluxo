@@ -308,6 +308,11 @@ const Diagrama: React.FC = () => {
     const rect = diagramRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    if (isMiddleZooming) {
+      setIsMiddleZooming(false);
+      return;
+    }
+
     const worldX = (e.clientX - rect.left - offset.x) / scale;
     const worldY = (e.clientY - rect.top - offset.y) / scale;
 
@@ -519,28 +524,30 @@ const Diagrama: React.FC = () => {
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-  
-    const zoomIntensity = 0.001;
-    const delta = -e.deltaY * zoomIntensity;
-  
-    const newScale = Math.min(Math.max(0.1, scale + delta), 5);
-  
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+
+  const zoomIntensity = 0.001;
+  const delta = -e.deltaY * zoomIntensity;
+
+  setScale(prevScale => {
+    const newScale = Math.min(Math.max(0.1, prevScale + delta), 5);
+
     const rect = diagramRef.current!.getBoundingClientRect();
-  
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-  
-    const worldX = (mouseX - offset.x) / scale;
-    const worldY = (mouseY - offset.y) / scale;
-  
+
+    const worldX = (mouseX - offset.x) / prevScale;
+    const worldY = (mouseY - offset.y) / prevScale;
+
     const newOffsetX = mouseX - worldX * newScale;
     const newOffsetY = mouseY - worldY * newScale;
-  
-    setScale(newScale);
+
     setOffset({ x: newOffsetX, y: newOffsetY });
-  };
+
+    return newScale;
+  });
+};
 
   const getNextSequenceNumber = (): number => {
     const usedNumbers = cards
