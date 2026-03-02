@@ -381,18 +381,51 @@ const Diagrama: React.FC = () => {
   }, [pushState, setCards, setConnections, setFileName]);
 
   // Export PDF
-  const handlePrint = useCallback(async (): Promise<void> => {
+  const handlePrint = async (): Promise<void> => {
     if (!diagramRef.current) return;
-
+  
     try {
-      const canvas = await html2canvas(diagramRef.current, { scale: 2 });
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
+      const canvas = await html2canvas(diagramRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff'
+      });
+  
+      const imgData = canvas.toDataURL('image/png');
+  
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [A4_WIDTH, A4_HEIGHT]
+      });
+  
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+  
+      const ratio = Math.min(
+        A4_WIDTH / imgWidth,
+        A4_HEIGHT / imgHeight
+      );
+  
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+  
+      const offsetX = (A4_WIDTH - finalWidth) / 2;
+      const offsetY = (A4_HEIGHT - finalHeight) / 2;
+  
+      pdf.addImage(
+        imgData,
+        'PNG',
+        offsetX,
+        offsetY,
+        finalWidth,
+        finalHeight
+      );
+  
       pdf.save(`${fileName}.pdf`);
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
     }
-  }, [fileName]);
+  };
 
   // Atalhos teclado
   useEffect(() => {
