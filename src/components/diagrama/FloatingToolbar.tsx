@@ -117,7 +117,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
   return (
     <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 px-3 py-2 flex items-center gap-3">
+      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow border border-gray-200 px-3 py-2 flex items-center gap-3">
 
         {/* ARQUIVO */}
         <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
