@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PrintDialog, { PrintOptions, PrintMode } from './PrintDialog';
+import { buildExportSvg, type Bounds } from './exportSvg';
 import Card from './Card';
 import ConnectionLine from './ConnectionLine';
 import SelectionBox from './SelectionBox';
@@ -23,8 +24,8 @@ import {
   A4_HEIGHT,
 } from '@/types/diagrama';
 
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+import 'svg2pdf.js';
 
 type ConnectionStart = { cardId: string; point: Point } | null;
 
@@ -400,221 +401,193 @@ const Diagrama: React.FC = () => {
 
     //Motor de exportação
 
-  type Bounds = { x: number; y: number; width: number; height: number };
-
-  const getBoundsForCards = (list: CardType[], padding: number): Bounds | null => {
-    if (!list.length) return null;
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const c of list) {
-      minX = Math.min(minX, c.x);
-      minY = Math.min(minY, c.y);
-      maxX = Math.max(maxX, c.x + c.width);
-      maxY = Math.max(maxY, c.y + c.height);
-    }
-
-    return {
-      x: minX - padding,
-      y: minY - padding,
-      width: (maxX - minX) + padding * 2,
-      height: (maxY - minY) + padding * 2,
+    const getBoundsForCards = (list: CardType[], padding: number): Bounds | null => {
+      if (!list.length) return null;
+    
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of list) {
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + c.width);
+        maxY = Math.max(maxY, c.y + c.height);
+      }
+    
+      return {
+        x: minX - padding,
+        y: minY - padding,
+        width: (maxX - minX) + padding * 2,
+        height: (maxY - minY) + padding * 2,
+      };
     };
-  };
-
-  const getExportBounds = (opts: PrintOptions): Bounds | null => {
-    const list =
-      opts.selectionOnly
+    
+    const getExportBounds = (opts: PrintOptions): Bounds | null => {
+      const list = opts.selectionOnly
         ? cards.filter(c => selectedCards.has(c.id))
         : cards;
-
-    return getBoundsForCards(list, opts.margin);
-  };
-
-  // aplica temporariamente scale/offset e (opcional) grid/sombra, captura canvas e restaura
-  const withTemporaryView = async <T,>(
-    nextScale: number,
-    nextOffset: Point,
-    opts: PrintOptions,
-    fn: () => Promise<T>
-  ): Promise<T> => {
-    const prevScale = scale;
-    const prevOffset = offset;
-    const prevGrid = showGrid;
-
-    const el = diagramRef.current;
-
-    try {
-      // grid
-      if (!opts.includeGrid) setShowGrid(false);
-
-      // sombras via atributo (CSS)
-      if (el) el.setAttribute('data-export-shadows', opts.includeShadows ? '1' : '0');
-
-      setScale(nextScale);
-      setOffset(nextOffset);
-
-      // aguarda render
-      await new Promise(r => setTimeout(r, 120));
-
-      return await fn();
-    } finally {
-      setScale(prevScale);
-      setOffset(prevOffset);
-      if (!opts.includeGrid) setShowGrid(prevGrid);
-      if (el) el.removeAttribute('data-export-shadows');
-    }
-  };
-
-  const captureA4CanvasFromViewport = async (): Promise<HTMLCanvasElement> => {
-    if (!diagramRef.current) throw new Error('diagramRef ausente');
-
-    // captura o viewport e a gente encaixa no A4 no PDF
-    return await html2canvas(diagramRef.current, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-    });
-  };
-
-  const exportFitOnePage = async (opts: PrintOptions) => {
-    const bounds = getExportBounds(opts);
-    if (!bounds) return;
-
-    // escala para caber em 1 A4
-    const ratio = Math.min(A4_WIDTH / bounds.width, A4_HEIGHT / bounds.height);
-
-    // centraliza
-    const contentW = bounds.width * ratio;
-    const contentH = bounds.height * ratio;
-    const padX = (A4_WIDTH - contentW) / 2;
-    const padY = (A4_HEIGHT - contentH) / 2;
-
-    const nextScale = ratio;
-    const nextOffset = {
-      x: -bounds.x * ratio + padX,
-      y: -bounds.y * ratio + padY,
+    
+      return getBoundsForCards(list, opts.margin);
     };
-
-    const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
-
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'px',
-      format: [A4_WIDTH, A4_HEIGHT],
-    });
-
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
-    pdf.save(`${fileName}.pdf`);
-  };
-
-const exportScaleToXY = async (opts: PrintOptions) => {
-  const bounds = getExportBounds(opts);
-  if (!bounds) return;
-
-  const pagesX = Math.max(1, opts.pagesX);
-  const pagesY = Math.max(1, opts.pagesY);
-
-  // escala para caber exatamente no retângulo pagesX*pagesY
-  const ratioX = (A4_WIDTH * pagesX) / bounds.width;
-  const ratioY = (A4_HEIGHT * pagesY) / bounds.height;
-  const ratio = Math.min(ratioX, ratioY);
-
-  // centraliza dentro do “grid” total de páginas
-  const totalW = A4_WIDTH * pagesX;
-  const totalH = A4_HEIGHT * pagesY;
-
-  const contentW = bounds.width * ratio;
-  const contentH = bounds.height * ratio;
-
-  const startPadX = (totalW - contentW) / 2;
-  const startPadY = (totalH - contentH) / 2;
-
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'px',
-    format: [A4_WIDTH, A4_HEIGHT],
-  });
-
-  let pageIndex = 0;
-
-  for (let row = 0; row < pagesY; row++) {
-    for (let col = 0; col < pagesX; col++) {
-      // “janela” do mundo que cada página vai mostrar
-      const pageWorldX = bounds.x + ((col * A4_WIDTH - startPadX) / ratio);
-      const pageWorldY = bounds.y + ((row * A4_HEIGHT - startPadY) / ratio);
-
-      const nextScale = ratio;
-      const nextOffset = {
-        x: -pageWorldX * ratio,
-        y: -pageWorldY * ratio,
-      };
-
-      const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
-
-      if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
-
-      pageIndex++;
-    }
-  }
-
-  pdf.save(`${fileName}.pdf`);
-};
-
-const exportCropMultipage = async (opts: PrintOptions) => {
-  const bounds = getExportBounds(opts);
-  if (!bounds) return;
-
-  // escala fixa do export (não encolhe “até sumir”)
-  const exportScale = Math.max(0.2, opts.exportZoom || 1);
-
-  const pageWorldW = A4_WIDTH / exportScale;
-  const pageWorldH = A4_HEIGHT / exportScale;
-
-  const cols = Math.ceil(bounds.width / pageWorldW);
-  const rows = Math.ceil(bounds.height / pageWorldH);
-
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'px',
-    format: [A4_WIDTH, A4_HEIGHT],
-  });
-
-  let pageIndex = 0;
-
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const pageX = bounds.x + c * pageWorldW;
-      const pageY = bounds.y + r * pageWorldH;
-
-      const nextScale = exportScale;
-      const nextOffset = {
-        x: -pageX * exportScale,
-        y: -pageY * exportScale,
-      };
-
-      const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
-
-      if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
-
-      pageIndex++;
-    }
-  }
-
-  pdf.save(`${fileName}.pdf`);
-};
-
-const generatePdf = async (opts: PrintOptions) => {
-  setIsPrinting(true);
-  try {
-    if (opts.mode === 'fit') await exportFitOnePage(opts);
-    else if (opts.mode === 'scale') await exportScaleToXY(opts);
-    else await exportCropMultipage(opts);
-  } finally {
-    setIsPrinting(false);
-  }
-};
+    
+    const svgStringToElement = (svg: string): SVGSVGElement => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svg, 'image/svg+xml');
+      const el = doc.documentElement as unknown as SVGSVGElement;
+      return el;
+    };
+    
+    const renderSvgPageToPdf = async (pdf: jsPDF, svgString: string) => {
+      const svgEl = svgStringToElement(svgString);
+      // Render vetorial no PDF (sem rasterizar)
+      await (pdf as any).svg(svgEl, {
+        x: 0,
+        y: 0,
+        width: A4_WIDTH,
+        height: A4_HEIGHT,
+      });
+    };
+    
+    const exportFitOnePageVector = async (opts: PrintOptions) => {
+      const bounds = getExportBounds(opts);
+      if (!bounds) return;
+    
+      // “Fit” = viewBox é exatamente o bounds; PDF é 1 página A4
+      const pageViewBox: Bounds = { ...bounds };
+    
+      const svg = buildExportSvg({
+        cards,
+        connections,
+        bounds,
+        viewBox: pageViewBox,
+        opts: {
+          includeGrid: opts.includeGrid,
+          includeShadows: opts.includeShadows,
+          gridSize: GRID_SIZE,
+          background: '#ffffff',
+        },
+      });
+    
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+      await renderSvgPageToPdf(pdf, svg);
+      pdf.save(`${fileName}.pdf`);
+    };
+    
+    const exportCropMultipageVector = async (opts: PrintOptions) => {
+      const bounds = getExportBounds(opts);
+      if (!bounds) return;
+    
+      const exportScale = Math.max(0.2, opts.exportZoom || 1);
+    
+      const pageWorldW = A4_WIDTH / exportScale;
+      const pageWorldH = A4_HEIGHT / exportScale;
+    
+      const cols = Math.ceil(bounds.width / pageWorldW);
+      const rows = Math.ceil(bounds.height / pageWorldH);
+    
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+    
+      let pageIndex = 0;
+    
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const pageX = bounds.x + c * pageWorldW;
+          const pageY = bounds.y + r * pageWorldH;
+    
+          const viewBox: Bounds = {
+            x: pageX,
+            y: pageY,
+            width: pageWorldW,
+            height: pageWorldH,
+          };
+    
+          const svg = buildExportSvg({
+            cards,
+            connections,
+            bounds,
+            viewBox,
+            opts: {
+              includeGrid: opts.includeGrid,
+              includeShadows: opts.includeShadows,
+              gridSize: GRID_SIZE,
+              background: '#ffffff',
+            },
+          });
+    
+          if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+          await renderSvgPageToPdf(pdf, svg);
+          pageIndex++;
+        }
+      }
+    
+      pdf.save(`${fileName}.pdf`);
+    };
+    
+    const exportScaleToXYVector = async (opts: PrintOptions) => {
+      const bounds = getExportBounds(opts);
+      if (!bounds) return;
+    
+      const pagesX = Math.max(1, opts.pagesX);
+      const pagesY = Math.max(1, opts.pagesY);
+    
+      // escala para caber em X*Y páginas
+      const ratioX = (A4_WIDTH * pagesX) / bounds.width;
+      const ratioY = (A4_HEIGHT * pagesY) / bounds.height;
+      const ratio = Math.min(ratioX, ratioY);
+    
+      const totalWorldW = (A4_WIDTH * pagesX) / ratio;
+      const totalWorldH = (A4_HEIGHT * pagesY) / ratio;
+    
+      // centraliza o bounds dentro do retângulo total
+      const startX = bounds.x - (totalWorldW - bounds.width) / 2;
+      const startY = bounds.y - (totalWorldH - bounds.height) / 2;
+    
+      const pageWorldW = A4_WIDTH / ratio;
+      const pageWorldH = A4_HEIGHT / ratio;
+    
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+    
+      let pageIndex = 0;
+    
+      for (let r = 0; r < pagesY; r++) {
+        for (let c = 0; c < pagesX; c++) {
+          const viewBox: Bounds = {
+            x: startX + c * pageWorldW,
+            y: startY + r * pageWorldH,
+            width: pageWorldW,
+            height: pageWorldH,
+          };
+    
+          const svg = buildExportSvg({
+            cards,
+            connections,
+            bounds,
+            viewBox,
+            opts: {
+              includeGrid: opts.includeGrid,
+              includeShadows: opts.includeShadows,
+              gridSize: GRID_SIZE,
+              background: '#ffffff',
+            },
+          });
+    
+          if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+          await renderSvgPageToPdf(pdf, svg);
+          pageIndex++;
+        }
+      }
+    
+      pdf.save(`${fileName}.pdf`);
+    };
+    
+    const generatePdf = async (opts: PrintOptions) => {
+      setIsPrinting(true);
+      try {
+        if (opts.mode === 'fit') await exportFitOnePageVector(opts);
+        else if (opts.mode === 'scale') await exportScaleToXYVector(opts);
+        else await exportCropMultipageVector(opts);
+      } finally {
+        setIsPrinting(false);
+      }
+    };
 
 
   // Atalhos teclado
