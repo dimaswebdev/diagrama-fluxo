@@ -123,6 +123,7 @@ const Diagrama: React.FC = () => {
   // Refs DOM
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
 
   // Refs (para listener wheel não depender de deps e não recriar)
   const scaleRef = useRef(scale);
@@ -382,13 +383,21 @@ const Diagrama: React.FC = () => {
 
   // Export PDF
   const handlePrint = async (): Promise<void> => {
-    if (!diagramRef.current) return;
+    if (!worldRef.current) return;
   
     try {
-      const canvas = await html2canvas(diagramRef.current, {
+      // Temporariamente remove zoom/pan para exportar em escala 1
+      const originalTransform = worldRef.current.style.transform;
+      worldRef.current.style.transform = 'translate(0px, 0px) scale(1)';
+  
+      const canvas = await html2canvas(worldRef.current, {
         scale: 2,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        width: A4_WIDTH,
+        height: A4_HEIGHT
       });
+  
+      worldRef.current.style.transform = originalTransform;
   
       const imgData = canvas.toDataURL('image/png');
   
@@ -398,28 +407,7 @@ const Diagrama: React.FC = () => {
         format: [A4_WIDTH, A4_HEIGHT]
       });
   
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-  
-      const ratio = Math.min(
-        A4_WIDTH / imgWidth,
-        A4_HEIGHT / imgHeight
-      );
-  
-      const finalWidth = imgWidth * ratio;
-      const finalHeight = imgHeight * ratio;
-  
-      const offsetX = (A4_WIDTH - finalWidth) / 2;
-      const offsetY = (A4_HEIGHT - finalHeight) / 2;
-  
-      pdf.addImage(
-        imgData,
-        'PNG',
-        offsetX,
-        offsetY,
-        finalWidth,
-        finalHeight
-      );
+      pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
   
       pdf.save(`${fileName}.pdf`);
     } catch (error) {
@@ -865,6 +853,7 @@ const Diagrama: React.FC = () => {
       >
         {/* Camada transformável (mundo virtual) */}
         <div
+          ref={worldRef}
           className="absolute inset-0"
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
