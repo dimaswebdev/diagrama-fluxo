@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import PrintDialog, { PrintOptions, PrintMode } from './PrintDialog';
 import Card from './Card';
 import ConnectionLine from './ConnectionLine';
 import SelectionBox from './SelectionBox';
@@ -119,6 +119,23 @@ const Diagrama: React.FC = () => {
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [isMiddleZooming, setIsMiddleZooming] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
+
+  //Estado de impressão
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const [printOptions, setPrintOptions] = useState<PrintOptions>({
+  selectionOnly: false,
+  mode: 'crop',        // padrão bom: multi-página
+  pagesX: 1,
+  pagesY: 1,
+  margin: 60,
+  exportZoom: 1,
+  includeGrid: true,
+  includeShadows: true,
+});
+
+
 
   // Refs DOM
   const diagramRef = useRef<HTMLDivElement>(null);
@@ -381,115 +398,224 @@ const Diagrama: React.FC = () => {
     setFileName('Diagrama sem título');
   }, [pushState, setCards, setConnections, setFileName]);
 
-      // ===============================
-    // EXPORTAÇÃO A4 AJUSTADA
-    // ===============================
+    //Motor de exportação
 
-    type Bounds = { x: number; y: number; width: number; height: number };
-    type ExportMode = 'all' | 'selection';
+  type Bounds = { x: number; y: number; width: number; height: number };
 
-    const getBoundsForCards = (list: CardType[], padding = 40): Bounds | null => {
-      if (!list.length) return null;
+  const getBoundsForCards = (list: CardType[], padding: number): Bounds | null => {
+    if (!list.length) return null;
 
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const c of list) {
+      minX = Math.min(minX, c.x);
+      minY = Math.min(minY, c.y);
+      maxX = Math.max(maxX, c.x + c.width);
+      maxY = Math.max(maxY, c.y + c.height);
+    }
 
-      list.forEach(card => {
-        minX = Math.min(minX, card.x);
-        minY = Math.min(minY, card.y);
-        maxX = Math.max(maxX, card.x + card.width);
-        maxY = Math.max(maxY, card.y + card.height);
-      });
+    return {
+      x: minX - padding,
+      y: minY - padding,
+      width: (maxX - minX) + padding * 2,
+      height: (maxY - minY) + padding * 2,
+    };
+  };
 
-      return {
-        x: minX - padding,
-        y: minY - padding,
-        width: (maxX - minX) + padding * 2,
-        height: (maxY - minY) + padding * 2
+  const getExportBounds = (opts: PrintOptions): Bounds | null => {
+    const list =
+      opts.selectionOnly
+        ? cards.filter(c => selectedCards.has(c.id))
+        : cards;
+
+    return getBoundsForCards(list, opts.margin);
+  };
+
+  // aplica temporariamente scale/offset e (opcional) grid/sombra, captura canvas e restaura
+  const withTemporaryView = async <T,>(
+    nextScale: number,
+    nextOffset: Point,
+    opts: PrintOptions,
+    fn: () => Promise<T>
+  ): Promise<T> => {
+    const prevScale = scale;
+    const prevOffset = offset;
+    const prevGrid = showGrid;
+
+    const el = diagramRef.current;
+
+    try {
+      // grid
+      if (!opts.includeGrid) setShowGrid(false);
+
+      // sombras via atributo (CSS)
+      if (el) el.setAttribute('data-export-shadows', opts.includeShadows ? '1' : '0');
+
+      setScale(nextScale);
+      setOffset(nextOffset);
+
+      // aguarda render
+      await new Promise(r => setTimeout(r, 120));
+
+      return await fn();
+    } finally {
+      setScale(prevScale);
+      setOffset(prevOffset);
+      if (!opts.includeGrid) setShowGrid(prevGrid);
+      if (el) el.removeAttribute('data-export-shadows');
+    }
+  };
+
+  const captureA4CanvasFromViewport = async (): Promise<HTMLCanvasElement> => {
+    if (!diagramRef.current) throw new Error('diagramRef ausente');
+
+    // captura o viewport e a gente encaixa no A4 no PDF
+    return await html2canvas(diagramRef.current, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+    });
+  };
+
+  const exportFitOnePage = async (opts: PrintOptions) => {
+    const bounds = getExportBounds(opts);
+    if (!bounds) return;
+
+    // escala para caber em 1 A4
+    const ratio = Math.min(A4_WIDTH / bounds.width, A4_HEIGHT / bounds.height);
+
+    // centraliza
+    const contentW = bounds.width * ratio;
+    const contentH = bounds.height * ratio;
+    const padX = (A4_WIDTH - contentW) / 2;
+    const padY = (A4_HEIGHT - contentH) / 2;
+
+    const nextScale = ratio;
+    const nextOffset = {
+      x: -bounds.x * ratio + padX,
+      y: -bounds.y * ratio + padY,
+    };
+
+    const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'px',
+      format: [A4_WIDTH, A4_HEIGHT],
+    });
+
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
+    pdf.save(`${fileName}.pdf`);
+  };
+
+const exportScaleToXY = async (opts: PrintOptions) => {
+  const bounds = getExportBounds(opts);
+  if (!bounds) return;
+
+  const pagesX = Math.max(1, opts.pagesX);
+  const pagesY = Math.max(1, opts.pagesY);
+
+  // escala para caber exatamente no retângulo pagesX*pagesY
+  const ratioX = (A4_WIDTH * pagesX) / bounds.width;
+  const ratioY = (A4_HEIGHT * pagesY) / bounds.height;
+  const ratio = Math.min(ratioX, ratioY);
+
+  // centraliza dentro do “grid” total de páginas
+  const totalW = A4_WIDTH * pagesX;
+  const totalH = A4_HEIGHT * pagesY;
+
+  const contentW = bounds.width * ratio;
+  const contentH = bounds.height * ratio;
+
+  const startPadX = (totalW - contentW) / 2;
+  const startPadY = (totalH - contentH) / 2;
+
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'px',
+    format: [A4_WIDTH, A4_HEIGHT],
+  });
+
+  let pageIndex = 0;
+
+  for (let row = 0; row < pagesY; row++) {
+    for (let col = 0; col < pagesX; col++) {
+      // “janela” do mundo que cada página vai mostrar
+      const pageWorldX = bounds.x + ((col * A4_WIDTH - startPadX) / ratio);
+      const pageWorldY = bounds.y + ((row * A4_HEIGHT - startPadY) / ratio);
+
+      const nextScale = ratio;
+      const nextOffset = {
+        x: -pageWorldX * ratio,
+        y: -pageWorldY * ratio,
       };
-    };
 
-    const getBoundsAll = () => getBoundsForCards(cards, 60);
+      const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
 
-    const getBoundsSelection = () => {
-      const ids = Array.from(selectedCards);
-      const selected = cards.filter(c => ids.includes(c.id));
-      return getBoundsForCards(selected, 60);
-    };
+      if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
 
-    const exportMultipageA4 = async (mode: ExportMode): Promise<void> => {
-      if (!diagramRef.current) return;
-    
-      const bounds = mode === 'selection'
-        ? getBoundsSelection()
-        : getBoundsAll();
-    
-      if (!bounds) return;
-    
-      const originalScale = scale;
-      const originalOffset = offset;
-    
-      // 🔥 Escala fixa de exportação (não reduz)
-      const exportScale = 1;
-    
-      const pageWorldWidth = A4_WIDTH / exportScale;
-      const pageWorldHeight = A4_HEIGHT / exportScale;
-    
-      const cols = Math.ceil(bounds.width / pageWorldWidth);
-      const rows = Math.ceil(bounds.height / pageWorldHeight);
-    
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [A4_WIDTH, A4_HEIGHT],
-      });
-    
-      let pageIndex = 0;
-    
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const pageX = bounds.x + col * pageWorldWidth;
-          const pageY = bounds.y + row * pageWorldHeight;
-    
-          setScale(exportScale);
-          setOffset({
-            x: -pageX * exportScale,
-            y: -pageY * exportScale,
-          });
-    
-          await new Promise(res => setTimeout(res, 120));
-    
-          const canvas = await html2canvas(diagramRef.current, {
-            scale: 2,
-            backgroundColor: '#ffffff',
-            useCORS: true
-          });
-    
-          if (pageIndex > 0) {
-            pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
-          }
-    
-          pdf.addImage(
-            canvas.toDataURL('image/png'),
-            'PNG',
-            0,
-            0,
-            A4_WIDTH,
-            A4_HEIGHT
-          );
-    
-          pageIndex++;
-        }
-      }
-    
-      // restaura estado
-      setScale(originalScale);
-      setOffset(originalOffset);
-    
-      pdf.save(`${fileName}.pdf`);
-    };
+      pageIndex++;
+    }
+  }
+
+  pdf.save(`${fileName}.pdf`);
+};
+
+const exportCropMultipage = async (opts: PrintOptions) => {
+  const bounds = getExportBounds(opts);
+  if (!bounds) return;
+
+  // escala fixa do export (não encolhe “até sumir”)
+  const exportScale = Math.max(0.2, opts.exportZoom || 1);
+
+  const pageWorldW = A4_WIDTH / exportScale;
+  const pageWorldH = A4_HEIGHT / exportScale;
+
+  const cols = Math.ceil(bounds.width / pageWorldW);
+  const rows = Math.ceil(bounds.height / pageWorldH);
+
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'px',
+    format: [A4_WIDTH, A4_HEIGHT],
+  });
+
+  let pageIndex = 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const pageX = bounds.x + c * pageWorldW;
+      const pageY = bounds.y + r * pageWorldH;
+
+      const nextScale = exportScale;
+      const nextOffset = {
+        x: -pageX * exportScale,
+        y: -pageY * exportScale,
+      };
+
+      const canvas = await withTemporaryView(nextScale, nextOffset, opts, captureA4CanvasFromViewport);
+
+      if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH, A4_HEIGHT);
+
+      pageIndex++;
+    }
+  }
+
+  pdf.save(`${fileName}.pdf`);
+};
+
+const generatePdf = async (opts: PrintOptions) => {
+  setIsPrinting(true);
+  try {
+    if (opts.mode === 'fit') await exportFitOnePage(opts);
+    else if (opts.mode === 'scale') await exportScaleToXY(opts);
+    else await exportCropMultipage(opts);
+  } finally {
+    setIsPrinting(false);
+  }
+};
+
 
   // Atalhos teclado
   useEffect(() => {
@@ -541,7 +667,7 @@ const Diagrama: React.FC = () => {
 
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
-        exportMultipageA4('all');
+        setShowPrintDialog(true);
         return;
       }
 
@@ -870,7 +996,7 @@ const Diagrama: React.FC = () => {
         onDelete={deleteSelected}
         onUndo={undo}
         onRedo={redo}
-        onPrint={() => exportMultipageA4('all')}
+        onPrint={() => setShowPrintDialog(true)}
         onNewFile={handleNewFile}
         onEdit={() => {
           if (selectedCards.size === 1) {
@@ -1067,6 +1193,20 @@ const Diagrama: React.FC = () => {
           onClose={() => setEditingCard(null)}
         />
       )}
+
+      <PrintDialog
+        open={showPrintDialog}
+        options={printOptions}
+        onChange={setPrintOptions}
+        onClose={() => setShowPrintDialog(false)}
+        onConfirm={async () => {
+          await generatePdf(printOptions);
+          setShowPrintDialog(false);
+        }}
+        canSelection={selectedCards.size > 0}
+        isPrinting={isPrinting}
+      />
+
     </div>
   );
 };
