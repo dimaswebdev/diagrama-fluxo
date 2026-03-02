@@ -523,29 +523,72 @@ const Diagrama: React.FC = () => {
     );
   };
 
+  useEffect(() => {
+    const diagramElement = diagramRef.current;
+    if (!diagramElement) return;
+  
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Bloqueia o scroll da página e o zoom nativo do navegador
+      e.preventDefault();
+  
+      const zoomIntensity = 0.001;
+      // e.deltaY é positivo para baixo (zoom out) e negativo para cima (zoom in)
+      const delta = -e.deltaY * zoomIntensity;
+  
+      setScale(prevScale => {
+        const newScale = Math.min(Math.max(0.1, prevScale + delta), 5);
+  
+        const rect = diagramElement.getBoundingClientRect();
+        
+        // Coordenadas do mouse em relação ao elemento
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+  
+        // Cálculo matemático para manter o ponto do mouse fixo durante o zoom
+        const worldX = (mouseX - offset.x) / prevScale;
+        const worldY = (mouseY - offset.y) / prevScale;
+  
+        const newOffsetX = mouseX - worldX * newScale;
+        const newOffsetY = mouseY - worldY * newScale;
+  
+        setOffset({ x: newOffsetX, y: newOffsetY });
+  
+        return newScale;
+      });
+    };
+  
+    // O pulo do gato: { passive: false } permite que o preventDefault funcione
+    diagramElement.addEventListener('wheel', handleNativeWheel, { passive: false });
+  
+    return () => {
+      diagramElement.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [scale, offset]); // Dependências necessárias para o cálculo correto
+
+
   const handleWheel = (e: React.WheelEvent) => {
-  if (!e.ctrlKey && !e.metaKey) return;
-  e.preventDefault();
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
 
-  const zoomIntensity = 0.001;
-  const delta = -e.deltaY * zoomIntensity;
+    const zoomIntensity = 0.001;
+    const delta = -e.deltaY * zoomIntensity;
 
-  setScale(prevScale => {
-    const newScale = Math.min(Math.max(0.1, prevScale + delta), 5);
+    setScale(prevScale => {
+      const newScale = Math.min(Math.max(0.1, prevScale + delta), 5);
 
-    const rect = diagramRef.current!.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+      const rect = diagramRef.current!.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    const worldX = (mouseX - offset.x) / prevScale;
-    const worldY = (mouseY - offset.y) / prevScale;
+      const worldX = (mouseX - offset.x) / prevScale;
+      const worldY = (mouseY - offset.y) / prevScale;
 
-    const newOffsetX = mouseX - worldX * newScale;
-    const newOffsetY = mouseY - worldY * newScale;
+      const newOffsetX = mouseX - worldX * newScale;
+      const newOffsetY = mouseY - worldY * newScale;
 
-    setOffset({ x: newOffsetX, y: newOffsetY });
+      setOffset({ x: newOffsetX, y: newOffsetY });
 
-    return newScale;
+      return newScale;
   });
 };
 
@@ -691,7 +734,6 @@ const Diagrama: React.FC = () => {
         <div
           ref={diagramRef}
           data-diagram-canvas
-          onWheel={handleWheel}
           className={`flex-1 relative overflow-hidden select-none ${
             isPanning
               ? 'cursor-grabbing'
