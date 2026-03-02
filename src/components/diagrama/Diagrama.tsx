@@ -205,45 +205,19 @@ const Diagrama: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent): void => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = Math.min(Math.max(scale * delta, 0.1), 3);
-        
-        const rect = diagramRef.current?.getBoundingClientRect();
-        if (rect) {
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          
-          setOffset((prev: Point) => ({
-            x: mouseX - (mouseX - prev.x) * (newScale / scale),
-            y: mouseY - (mouseY - prev.y) * (newScale / scale)
-          }));
-        }
-        
-        setScale(newScale);
-      }
-    };
 
-    const diagram = diagramRef.current;
-    if (diagram) {
-      diagram.addEventListener('wheel', handleWheel, { passive: false });
-      return () => diagram.removeEventListener('wheel', handleWheel);
-    }
-  }, [scale]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
 
+    // 🔎 BOTÃO DO MEIO → ZOOM
     if (e.button === 1) {
       e.preventDefault();
-      setIsMiddleZooming(false);
+      setIsMiddleZooming(true);
       return;
     }
-
-    // 🖱️ PAN (botão do meio ou ALT + clique)
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+  
+    // 🖱 ALT + Clique esquerdo → PAN
+    if (e.button === 0 && e.altKey) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
@@ -252,23 +226,15 @@ const Diagrama: React.FC = () => {
   
     const target = e.target as HTMLElement;
   
-    // 🔹 Se clicou em card → não interfere
     if (target.closest('.card')) return;
-  
-    // 🔹 Se clicou em ponto de conexão → não interfere
     if (target.closest('.connection-point')) return;
-  
-    // 🔹 Se clicou em linha → não inicia selection box
     if (target.closest('.connection-line')) return;
   
-    // 🔥 Clique vazio no canvas
-    // Se NÃO estiver segurando CTRL → limpa seleção
     if (!e.ctrlKey && !e.metaKey) {
       setSelectedCards(new Set());
       setSelectedConnections(new Set());
     }
   
-    // 🔹 Inicia seleção por arrasto (selection box)
     setIsDragging(true);
   
     const rect = diagramRef.current?.getBoundingClientRect();
@@ -293,21 +259,24 @@ const Diagrama: React.FC = () => {
     
       const delta = -e.movementY * zoomIntensity;
     
-      const newScale = Math.min(Math.max(0.1, scale + delta), 5);
+      setScale(prevScale => {
+        const newScale = Math.min(Math.max(0.1, prevScale + delta), 5);
     
-      const rect = diagramRef.current!.getBoundingClientRect();
+        const rect = diagramRef.current!.getBoundingClientRect();
     
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
     
-      const worldX = (mouseX - offset.x) / scale;
-      const worldY = (mouseY - offset.y) / scale;
+        const worldX = (mouseX - offset.x) / prevScale;
+        const worldY = (mouseY - offset.y) / prevScale;
     
-      const newOffsetX = mouseX - worldX * newScale;
-      const newOffsetY = mouseY - worldY * newScale;
+        const newOffsetX = mouseX - worldX * newScale;
+        const newOffsetY = mouseY - worldY * newScale;
     
-      setScale(newScale);
-      setOffset({ x: newOffsetX, y: newOffsetY });
+        setOffset({ x: newOffsetX, y: newOffsetY });
+    
+        return newScale;
+      });
     
       return;
     }
