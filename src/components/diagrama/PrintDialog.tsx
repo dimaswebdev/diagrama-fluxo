@@ -13,6 +13,7 @@ export type PrintOptions = {
   exportZoom: number;  // escala do mundo no PDF (apenas em crop)
   includeGrid: boolean;
   includeShadows: boolean;
+ orientation: 'auto' | 'portrait' | 'landscape';
 };
 
 type Props = {

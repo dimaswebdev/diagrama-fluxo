@@ -126,15 +126,16 @@ const Diagrama: React.FC = () => {
   const [isPrinting, setIsPrinting] = useState(false);
 
   const [printOptions, setPrintOptions] = useState<PrintOptions>({
-  selectionOnly: false,
-  mode: 'crop',        // padrão bom: multi-página
-  pagesX: 1,
-  pagesY: 1,
-  margin: 60,
-  exportZoom: 1,
-  includeGrid: true,
-  includeShadows: true,
-});
+    selectionOnly: false,
+    mode: 'crop',
+    pagesX: 1,
+    pagesY: 1,
+    margin: 60,
+    exportZoom: 1,
+    includeGrid: true,
+    includeShadows: true,
+    orientation: 'auto', 
+  });
 
 
 
@@ -434,6 +435,28 @@ const Diagrama: React.FC = () => {
       const el = doc.documentElement as unknown as SVGSVGElement;
       return el;
     };
+
+    const resolveOrientation = (
+      opts: PrintOptions,
+      bounds: Bounds
+    ) => {
+      let orientation: 'portrait' | 'landscape';
+    
+      if (opts.orientation === 'auto') {
+        orientation =
+          bounds.width > bounds.height ? 'landscape' : 'portrait';
+      } else {
+        orientation = opts.orientation;
+      }
+    
+      const width =
+        orientation === 'landscape' ? A4_HEIGHT : A4_WIDTH;
+    
+      const height =
+        orientation === 'landscape' ? A4_WIDTH : A4_HEIGHT;
+    
+      return { orientation, width, height };
+    };
     
     const renderSvgPageToPdf = async (pdf: jsPDF, svgString: string) => {
       const svgEl = svgStringToElement(svgString);
@@ -450,7 +473,9 @@ const Diagrama: React.FC = () => {
       const bounds = getExportBounds(opts);
       if (!bounds) return;
     
-      // “Fit” = viewBox é exatamente o bounds; PDF é 1 página A4
+      const { orientation, width, height } =
+        resolveOrientation(opts, bounds);
+    
       const pageViewBox: Bounds = { ...bounds };
     
       const svg = buildExportSvg({
@@ -466,7 +491,12 @@ const Diagrama: React.FC = () => {
         },
       });
     
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'px',
+        format: [width, height],
+      });
+    
       await renderSvgPageToPdf(pdf, svg);
       pdf.save(`${fileName}.pdf`);
     };
@@ -475,15 +505,23 @@ const Diagrama: React.FC = () => {
       const bounds = getExportBounds(opts);
       if (!bounds) return;
     
+      // 👇 PRIMEIRO resolve orientação
+      const { orientation, width, height } =
+        resolveOrientation(opts, bounds);
+    
       const exportScale = Math.max(0.2, opts.exportZoom || 1);
     
-      const pageWorldW = A4_WIDTH / exportScale;
-      const pageWorldH = A4_HEIGHT / exportScale;
+      const pageWorldW = width / exportScale;
+      const pageWorldH = height / exportScale;
     
       const cols = Math.ceil(bounds.width / pageWorldW);
       const rows = Math.ceil(bounds.height / pageWorldH);
     
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'px',
+        format: [width, height],
+      });
     
       let pageIndex = 0;
     
@@ -512,7 +550,9 @@ const Diagrama: React.FC = () => {
             },
           });
     
-          if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+          if (pageIndex > 0)
+            pdf.addPage([width, height], orientation);
+    
           await renderSvgPageToPdf(pdf, svg);
           pageIndex++;
         }
@@ -525,25 +565,30 @@ const Diagrama: React.FC = () => {
       const bounds = getExportBounds(opts);
       if (!bounds) return;
     
+      const { orientation, width, height } =
+        resolveOrientation(opts, bounds);
+    
       const pagesX = Math.max(1, opts.pagesX);
       const pagesY = Math.max(1, opts.pagesY);
     
-      // escala para caber em X*Y páginas
-      const ratioX = (A4_WIDTH * pagesX) / bounds.width;
-      const ratioY = (A4_HEIGHT * pagesY) / bounds.height;
+      const ratioX = (width * pagesX) / bounds.width;
+      const ratioY = (height * pagesY) / bounds.height;
       const ratio = Math.min(ratioX, ratioY);
     
-      const totalWorldW = (A4_WIDTH * pagesX) / ratio;
-      const totalWorldH = (A4_HEIGHT * pagesY) / ratio;
+      const totalWorldW = (width * pagesX) / ratio;
+      const totalWorldH = (height * pagesY) / ratio;
     
-      // centraliza o bounds dentro do retângulo total
       const startX = bounds.x - (totalWorldW - bounds.width) / 2;
       const startY = bounds.y - (totalWorldH - bounds.height) / 2;
     
-      const pageWorldW = A4_WIDTH / ratio;
-      const pageWorldH = A4_HEIGHT / ratio;
+      const pageWorldW = width / ratio;
+      const pageWorldH = height / ratio;
     
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_WIDTH, A4_HEIGHT] });
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'px',
+        format: [width, height],
+      });
     
       let pageIndex = 0;
     
@@ -569,7 +614,9 @@ const Diagrama: React.FC = () => {
             },
           });
     
-          if (pageIndex > 0) pdf.addPage([A4_WIDTH, A4_HEIGHT], 'portrait');
+          if (pageIndex > 0)
+            pdf.addPage([width, height], orientation);
+    
           await renderSvgPageToPdf(pdf, svg);
           pageIndex++;
         }

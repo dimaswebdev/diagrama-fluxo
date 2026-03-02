@@ -240,7 +240,7 @@ export function buildExportSvg(params: {
     ${defs}
     <rect x="${viewBox.x}" y="${viewBox.y}" width="${viewBox.width}" height="${viewBox.height}" fill="${opts.background}" />
     ${grid}
-    <g clip-path="url(#clipPage)">
+    <g >
       ${connSvg}
       ${cardSvg}
     </g>
