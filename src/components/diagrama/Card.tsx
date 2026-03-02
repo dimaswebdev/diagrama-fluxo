@@ -119,20 +119,20 @@ const Card: React.FC<CardProps> = ({
               e.preventDefault();
             
               const rect = e.currentTarget.getBoundingClientRect();
-            
-              const canvasRect = (e.currentTarget
-                .closest('[data-diagram-canvas]') as HTMLElement)
-                ?.getBoundingClientRect();
+              const canvasRect = (
+                e.currentTarget.closest('[data-diagram-canvas]') as HTMLElement
+              )?.getBoundingClientRect();
             
               if (!canvasRect) return;
             
-              const x =
-                (rect.left + rect.width / 2 - canvasRect.left - offset.x) / scale;
+              const mouseX = rect.left + rect.width / 2 - canvasRect.left;
+              const mouseY = rect.top + rect.height / 2 - canvasRect.top;
             
-              const y =
-                (rect.top + rect.height / 2 - canvasRect.top - offset.y) / scale;
+              // CONVERSÃO CORRETA PARA WORLD SPACE
+              const worldX = (mouseX - offset.x) / scale;
+              const worldY = (mouseY - offset.y) / scale;
             
-              onConnectionStart({ x, y });
+              onConnectionStart({ x: worldX, y: worldY });
             }}
           />
         );
