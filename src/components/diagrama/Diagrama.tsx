@@ -518,6 +518,7 @@ const Diagrama: React.FC = () => {
   };
 
   const handleWheel = (e: React.WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
   
     const zoomIntensity = 0.001;
