@@ -239,7 +239,7 @@ export function Timeline() {
     present: {
         cards: initialCards,
         connections: initialConnections,
-        selectedCardIds: new Set(),
+        selectedCardIds: new Set<string>(),
         mode: 'select' as InteractionMode,
         editingCard: null,
     },

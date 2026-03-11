@@ -74,6 +74,107 @@ function bezierPath(
   };
 }
 
+function orthogonalPath(
+  p0: { x: number; y: number },
+  p1: { x: number; y: number },
+  fromSide: Side,
+  toSide: Side
+) {
+  const vector =
+    fromSide === 'left'
+      ? { x: -1, y: 0 }
+      : fromSide === 'right'
+      ? { x: 1, y: 0 }
+      : fromSide === 'top'
+      ? { x: 0, y: -1 }
+      : { x: 0, y: 1 };
+
+  const toVector =
+    toSide === 'left'
+      ? { x: -1, y: 0 }
+      : toSide === 'right'
+      ? { x: 1, y: 0 }
+      : toSide === 'top'
+      ? { x: 0, y: -1 }
+      : { x: 0, y: 1 };
+
+  const lead = Math.max(26, Math.min(52, Math.max(Math.abs(p1.x - p0.x), Math.abs(p1.y - p0.y)) * 0.18));
+  const startLead = { x: p0.x + vector.x * lead, y: p0.y + vector.y * lead };
+  const endLead = { x: p1.x + toVector.x * lead, y: p1.y + toVector.y * lead };
+  const points = [p0, startLead];
+
+  const sameHorizontalAxis =
+    (fromSide === 'right' && toSide === 'left') || (fromSide === 'left' && toSide === 'right');
+  const sameVerticalAxis =
+    (fromSide === 'bottom' && toSide === 'top') || (fromSide === 'top' && toSide === 'bottom');
+
+  if (sameHorizontalAxis) {
+    const canUseCenterLane =
+      (fromSide === 'right' && startLead.x <= endLead.x) ||
+      (fromSide === 'left' && startLead.x >= endLead.x);
+
+    if (canUseCenterLane) {
+      const middleX = (startLead.x + endLead.x) / 2;
+      points.push({ x: middleX, y: startLead.y }, { x: middleX, y: endLead.y });
+    } else {
+      const outerX =
+        fromSide === 'right'
+          ? Math.max(startLead.x, endLead.x) + lead
+          : Math.min(startLead.x, endLead.x) - lead;
+      points.push({ x: outerX, y: startLead.y }, { x: outerX, y: endLead.y });
+    }
+  } else if (sameVerticalAxis) {
+    const canUseCenterLane =
+      (fromSide === 'bottom' && startLead.y <= endLead.y) ||
+      (fromSide === 'top' && startLead.y >= endLead.y);
+
+    if (canUseCenterLane) {
+      const middleY = (startLead.y + endLead.y) / 2;
+      points.push({ x: startLead.x, y: middleY }, { x: endLead.x, y: middleY });
+    } else {
+      const outerY =
+        fromSide === 'bottom'
+          ? Math.max(startLead.y, endLead.y) + lead
+          : Math.min(startLead.y, endLead.y) - lead;
+      points.push({ x: startLead.x, y: outerY }, { x: endLead.x, y: outerY });
+    }
+  } else if (fromSide === 'left' || fromSide === 'right') {
+    points.push({ x: endLead.x, y: startLead.y });
+  } else {
+    points.push({ x: startLead.x, y: endLead.y });
+  }
+
+  points.push(endLead, p1);
+
+  const radius = Math.max(8, Math.min(18, Math.abs(p1.x - p0.x) / 4 || 18, Math.abs(p1.y - p0.y) / 4 || 18));
+  let d = `M ${points[0].x} ${points[0].y}`;
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const inDx = current.x - prev.x;
+    const inDy = current.y - prev.y;
+    const outDx = next.x - current.x;
+    const outDy = next.y - current.y;
+    const inLength = Math.hypot(inDx, inDy);
+    const outLength = Math.hypot(outDx, outDy);
+    const cornerRadius = Math.min(radius, inLength / 2, outLength / 2);
+    const entry = {
+      x: current.x - (inDx / (inLength || 1)) * cornerRadius,
+      y: current.y - (inDy / (inLength || 1)) * cornerRadius,
+    };
+    const exit = {
+      x: current.x + (outDx / (outLength || 1)) * cornerRadius,
+      y: current.y + (outDy / (outLength || 1)) * cornerRadius,
+    };
+    d += ` L ${entry.x} ${entry.y} Q ${current.x} ${current.y} ${exit.x} ${exit.y}`;
+  }
+
+  d += ` L ${p1.x} ${p1.y}`;
+  return { d, prevPoint: points[points.length - 2] };
+}
+
 function arrowHead(
   end: { x: number; y: number },
   prev: { x: number; y: number },
@@ -109,6 +210,10 @@ function wrapText(text: string, maxChars: number) {
 
   if (line) lines.push(line);
   return lines;
+}
+
+function getLabelWidth(label: string) {
+  return Math.max(68, label.length * 7.2 + 26);
 }
 
 export function buildExportSvg(params: {
@@ -254,7 +359,10 @@ export function buildExportSvg(params: {
       const p0 = sidePoint(from, fromSide);
       const p1 = sidePoint(to, toSide);
 
-      const { d, cp1 } = bezierPath(p0, p1, fromSide, toSide);
+      const route =
+        conn.routeStyle === 'orthogonal'
+          ? orthogonalPath(p0, p1, fromSide, toSide)
+          : bezierPath(p0, p1, fromSide, toSide);
 
       const stroke = conn.color || '#2563eb';
       const dash =
@@ -264,11 +372,15 @@ export function buildExportSvg(params: {
           ? '2 5'
           : '';
 
-      const poly = arrowHead(p1, cp1, 10);
+      const poly = arrowHead(p1, 'cp1' in route ? route.cp1 : route.prevPoint, 10);
+      const label = (conn.label || '').trim();
+      const labelWidth = getLabelWidth(label);
+      const labelX = (p0.x + p1.x) / 2 - labelWidth / 2;
+      const labelY = (p0.y + p1.y) / 2 - 13;
 
       return `
         <g>
-          <path d="${d}"
+          <path d="${route.d}"
             fill="none"
             stroke="${stroke}"
             stroke-width="2"
@@ -277,6 +389,33 @@ export function buildExportSvg(params: {
             ${dash ? `stroke-dasharray="${dash}"` : ''} />
           <polygon points="${poly}"
             fill="${stroke}" />
+          ${
+            label
+              ? `<g>
+                  <rect
+                    x="${labelX}"
+                    y="${labelY}"
+                    width="${labelWidth}"
+                    height="26"
+                    rx="12"
+                    fill="rgba(255,255,255,0.88)"
+                    stroke="${stroke}"
+                    stroke-opacity="0.45"
+                    stroke-width="1.2"
+                  />
+                  <text
+                    x="${(p0.x + p1.x) / 2}"
+                    y="${(p0.y + p1.y) / 2 + 4}"
+                    text-anchor="middle"
+                    font-family="Inter, Arial, sans-serif"
+                    font-size="11"
+                    font-weight="600"
+                    fill="${stroke}">
+                    ${esc(label)}
+                  </text>
+                </g>`
+              : ''
+          }
         </g>
       `;
     })

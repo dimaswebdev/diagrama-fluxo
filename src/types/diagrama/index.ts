@@ -22,6 +22,7 @@ export interface Connection {
   fromCard: string;
   toCard: string;
   type?: 'normal' | 'dashed' | 'dotted';
+  routeStyle?: ConnectionRouteStyle;
   color?: string;
   label?: string;
   fromSide: 'top' | 'right' | 'bottom' | 'left';
@@ -46,6 +47,7 @@ export interface SelectionBox {
 }
 
 export type ConnectionType = 'normal' | 'dashed' | 'dotted';
+export type ConnectionRouteStyle = 'bezier' | 'orthogonal';
 export type CardType = 'default' | 'input' | 'output' | 'process' | 'decision';
 
 export const GRID_SIZE = 20;

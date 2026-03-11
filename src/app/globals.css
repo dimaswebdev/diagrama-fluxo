@@ -67,4 +67,52 @@
   .dotted-grid {
     background-image: radial-gradient(circle, #d1d5db 1.5px, transparent 1.5px);
   }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  .ui-hover-surface {
+    @apply border border-transparent  text-slate-700 transition;
+  }
+
+  .ui-hover-surface:hover {
+    background: rgba(236, 248, 250, 0.96);
+    border-color: rgba(165, 243, 252, 0.9);
+    color: rgb(14 116 144);
+  }
+
+  .ui-active-surface {
+    background: rgba(236, 248, 250, 0.96);
+    border-color: rgba(165, 243, 252, 0.95);
+    color: rgb(14 116 144);
+  }
+
+  .ui-soft-panel {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+    backdrop-filter: blur(18px);
+  }
+
+  .ui-destructive-surface {
+    @apply border border-transparent text-red-600 transition;
+    background: rgba(254, 242, 242, 0.94);
+  }
+
+  .ui-destructive-surface:hover {
+    background: rgba(254, 226, 226, 0.96);
+    border-color: rgba(254, 202, 202, 0.95);
+  }
+
+  .ui-disabled-surface {
+    @apply bg-slate-100 text-slate-300;
+  }
 }

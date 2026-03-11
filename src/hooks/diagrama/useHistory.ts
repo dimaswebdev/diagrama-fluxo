@@ -1,56 +1,49 @@
 'use client'
 
-import { useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { DiagramState } from '@/types/diagrama';
 
+const cloneState = (state: DiagramState): DiagramState => structuredClone(state);
+
 export function useHistory(initialState: DiagramState) {
+  const historyRef = useRef<DiagramState[]>([cloneState(initialState)]);
+  const currentIndexRef = useRef(0);
+  const [, setVersion] = useState(0);
 
-  const [history, setHistory] = useState<DiagramState[]>([
-    structuredClone(initialState)
-  ]);
-
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const notify = useCallback(() => {
+    setVersion((value) => value + 1);
+  }, []);
 
   const pushState = useCallback((newState: DiagramState) => {
-    setHistory(prevHistory => {
-      const truncated = prevHistory.slice(0, currentIndex + 1);
-
-      return [
-        ...truncated,
-        structuredClone(newState)
-      ];
-    });
-
-    setCurrentIndex(prev => prev + 1);
-
-  }, [currentIndex]);
+    const nextHistory = historyRef.current.slice(0, currentIndexRef.current + 1);
+    nextHistory.push(cloneState(newState));
+    historyRef.current = nextHistory;
+    currentIndexRef.current = nextHistory.length - 1;
+    notify();
+  }, [notify]);
 
   const undo = useCallback(() => {
-    if (currentIndex === 0) return null;
+    if (currentIndexRef.current === 0) return null;
 
-    const newIndex = currentIndex - 1;
-    setCurrentIndex(newIndex);
-
-    return structuredClone(history[newIndex]);
-
-  }, [currentIndex, history]);
+    currentIndexRef.current -= 1;
+    notify();
+    return cloneState(historyRef.current[currentIndexRef.current]);
+  }, [notify]);
 
   const redo = useCallback(() => {
-    if (currentIndex >= history.length - 1) return null;
+    if (currentIndexRef.current >= historyRef.current.length - 1) return null;
 
-    const newIndex = currentIndex + 1;
-    setCurrentIndex(newIndex);
-
-    return structuredClone(history[newIndex]);
-
-  }, [currentIndex, history]);
+    currentIndexRef.current += 1;
+    notify();
+    return cloneState(historyRef.current[currentIndexRef.current]);
+  }, [notify]);
 
   return {
-    current: history[currentIndex],
-    canUndo: currentIndex > 0,
-    canRedo: currentIndex < history.length - 1,
+    current: historyRef.current[currentIndexRef.current],
+    canUndo: currentIndexRef.current > 0,
+    canRedo: currentIndexRef.current < historyRef.current.length - 1,
     pushState,
     undo,
-    redo
+    redo,
   };
 }

@@ -1,20 +1,32 @@
-'use client';
+﻿'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import PrintDialog, { PrintOptions, PrintMode } from './PrintDialog';
-import { buildExportSvg, type Bounds } from './exportSvg';
+import PrintDialog, { PrintOptions } from './PrintDialog';
 import Card from './Card';
 import ConnectionLine from './ConnectionLine';
+import {
+  getClosestSideForPoint,
+  getPreviewConnectionGeometry,
+  resolveConnectionSides,
+  type ConnectionSide,
+} from './connectionRouting';
 import SelectionBox from './SelectionBox';
 import FloatingToolbar from './FloatingToolbar';
+import DiagramHeader from './DiagramHeader';
 import { EditCardDialog } from './EditCardDialog';
+import ConnectionEditDialog from './ConnectionEditDialog';
 
 import { useLocalStorage } from '@/hooks/diagrama/useLocalStorage';
+import { useDiagramExport } from '@/hooks/diagrama/useDiagramExport';
 import { useHistory } from '@/hooks/diagrama/useHistory';
+import {
+} from 'lucide-react';
 
 import {
   Card as CardType,
   Connection,
+  ConnectionRouteStyle,
+  DiagramState,
   Point,
   SelectionBox as SelectionBoxType,
   ConnectionType,
@@ -24,12 +36,10 @@ import {
   A4_HEIGHT,
 } from '@/types/diagrama';
 
-import { jsPDF } from 'jspdf';
-import 'svg2pdf.js';
-
-type ConnectionStart = { cardId: string; point: Point } | null;
+type ConnectionStart = { cardId: string; point: Point; side: ConnectionSide } | null;
 
 const CARD_COLORS = [
+  '#2563EB',
   '#9ED6F0',
   '#19B7C6',
   '#0B8CA6',
@@ -50,51 +60,22 @@ const CARD_COLORS = [
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
 const getRandomColor = () => CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)];
-
-function calculateConnectionSides(
-  from: CardType,
-  to: CardType
-): {
-  fromSide: 'left' | 'right' | 'top' | 'bottom';
-  toSide: 'left' | 'right' | 'top' | 'bottom';
-} {
-  const fromCenter = {
-    x: from.x + from.width / 2,
-    y: from.y + from.height / 2,
-  };
-
-  const toCenter = {
-    x: to.x + to.width / 2,
-    y: to.y + to.height / 2,
-  };
-
-  const dx = toCenter.x - fromCenter.x;
-  const dy = toCenter.y - fromCenter.y;
-
-  if (Math.abs(dx) > Math.abs(dy)) {
-    return {
-      fromSide: dx > 0 ? 'right' : 'left',
-      toSide: dx > 0 ? 'left' : 'right',
-    };
-  }
-
-  return {
-    fromSide: dy > 0 ? 'bottom' : 'top',
-    toSide: dy > 0 ? 'top' : 'bottom',
-  };
-}
+const CARD_WIDTH = 320;
+const CARD_HEIGHT = 220;
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = Number.POSITIVE_INFINITY;
 
 const Diagrama: React.FC = () => {
-  // Persistência
+  // PersistÃªncia
   const [cards, setCards] = useLocalStorage<CardType[]>('diagram-cards', []);
   const [connections, setConnections] = useLocalStorage<Connection[]>('diagram-connections', []);
   const [fileName, setFileName] = useLocalStorage<string>('diagram-filename', 'Diagrama sem título');
 
-  // Seleção
+  // SeleÃ§Ã£o
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [selectedConnections, setSelectedConnections] = useState<Set<string>>(new Set());
 
-  // Interações (drag / pan / connect)
+  // InteraÃ§Ãµes (drag / pan / connect)
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState<Point>({ x: 0, y: 0 });
@@ -105,6 +86,7 @@ const Diagrama: React.FC = () => {
   const [connectionStart, setConnectionStart] = useState<ConnectionStart>(null);
   const [tempConnectionEnd, setTempConnectionEnd] = useState<Point | null>(null);
   const [connectionType, setConnectionType] = useState<ConnectionType>('normal');
+  const [connectionRouteStyle, setConnectionRouteStyle] = useState<ConnectionRouteStyle>('bezier');
   const [connectionColor, setConnectionColor] = useState<string>('#2563eb');
 
   // Mundo virtual (zoom/pan)
@@ -120,14 +102,15 @@ const Diagrama: React.FC = () => {
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [isMiddleZooming, setIsMiddleZooming] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
+  const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
 
-  //Estado de impressão
+  //Estado de impressÃ£o
   const [showPrintDialog, setShowPrintDialog] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false);
 
   const [printOptions, setPrintOptions] = useState<PrintOptions>({
     selectionOnly: false,
-    mode: 'crop',
+    mode: 'fit',
     pagesX: 1,
     pagesY: 1,
     margin: 60,
@@ -137,14 +120,25 @@ const Diagrama: React.FC = () => {
     orientation: 'auto', 
   });
 
+  const { isPrinting, printPreview, saveAsSvg, saveAsPng, saveAsPdf, generatePdf, printDocument } = useDiagramExport({
+    cards,
+    connections,
+    fileName,
+    printOptions,
+    selectedCardIds: selectedCards,
+  });
+
 
 
   // Refs DOM
   const diagramRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
+  const saveMenuRef = useRef<HTMLDivElement>(null);
+  const didDragCardsRef = useRef(false);
+  const suppressCardClickRef = useRef(false);
 
-  // Refs (para listener wheel não depender de deps e não recriar)
+  // Refs (para listener wheel nÃ£o depender de deps e nÃ£o recriar)
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
   useEffect(() => {
@@ -154,27 +148,160 @@ const Diagrama: React.FC = () => {
     offsetRef.current = offset;
   }, [offset]);
 
+  useEffect(() => {
+    if (!showSaveMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(event.target as Node)) {
+        setShowSaveMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [showSaveMenu]);
+
   // History
   const { canUndo, canRedo, pushState, undo, redo } = useHistory({ cards, connections });
 
-  // Map para performance (evita find O(n²) em conexões)
+  // Map para performance (evita find O(nÂ²) em conexÃµes)
   const cardMap = useMemo(() => {
     const m = new Map<string, CardType>();
     for (const c of cards) m.set(c.id, c);
     return m;
   }, [cards]);
 
-  // Helper: salva snapshot atual no histórico
-  const saveToHistory = useCallback(() => {
-    pushState({ cards, connections });
+  // Helper: salva snapshot atual no histÃ³rico
+  const saveToHistory = useCallback((state: DiagramState = { cards, connections }) => {
+    pushState(state);
   }, [cards, connections, pushState]);
+
+  const applyDiagramState = useCallback((state: DiagramState) => {
+    setCards(state.cards);
+    setConnections(state.connections);
+  }, [setCards, setConnections]);
+
+  const getViewportCenterWorld = useCallback(
+    (nextScale = scaleRef.current, nextOffset = offsetRef.current) => {
+      const width = containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH;
+      const height = containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT;
+
+      return {
+        x: (-nextOffset.x / nextScale) + width / (2 * nextScale),
+        y: (-nextOffset.y / nextScale) + height / (2 * nextScale),
+      };
+    },
+    []
+  );
+
+  const createCardAtPosition = useCallback((
+    x: number,
+    y: number,
+    {
+      sequence,
+      title,
+      label,
+      accent,
+      type = 'default',
+    }: {
+      sequence: number;
+      title: string;
+      label: string;
+      accent: string;
+      type?: CardTypeEnum;
+    }
+  ): CardType => ({
+    id: Date.now().toString(),
+    x,
+    y,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    sequence,
+    title,
+    content: 'Descreva o conteudo aqui.',
+    summary: '',
+    tags: [],
+    label,
+    date: new Date().toLocaleDateString('pt-BR'),
+    source: '',
+    accent,
+    type,
+  }), []);
+
+  const createCenteredCard = useCallback((
+    {
+      sequence,
+      title,
+      label,
+      accent,
+      scale = scaleRef.current,
+      offset = offsetRef.current,
+      type = 'default',
+    }: {
+      sequence: number;
+      title: string;
+      label: string;
+      accent: string;
+      scale?: number;
+      offset?: Point;
+      type?: CardTypeEnum;
+    }
+  ) => {
+    const center = getViewportCenterWorld(scale, offset);
+
+    return createCardAtPosition(center.x - CARD_WIDTH / 2, center.y - CARD_HEIGHT / 2, {
+      sequence,
+      title,
+      label,
+      accent,
+      type,
+    });
+  }, [createCardAtPosition, getViewportCenterWorld]);
+
+  const openSelectedCardEditor = useCallback(() => {
+    if (selectedCards.size === 1) {
+      const id = Array.from(selectedCards)[0];
+      const card = cardMap.get(id);
+      if (card) {
+        setEditingCard(card);
+      }
+      return;
+    }
+
+    if (selectedCards.size === 0 && selectedConnections.size === 1) {
+      setEditingConnectionId(Array.from(selectedConnections)[0]);
+    }
+  }, [cardMap, selectedCards, selectedConnections]);
+
+  const editingConnection = useMemo(
+    () => connections.find((connection) => connection.id === editingConnectionId) ?? null,
+    [connections, editingConnectionId]
+  );
+
+  const handleUndo = useCallback(() => {
+    const previousState = undo();
+    if (!previousState) return;
+
+    applyDiagramState(previousState);
+    setSelectedCards(new Set());
+    setSelectedConnections(new Set());
+  }, [applyDiagramState, undo]);
+
+  const handleRedo = useCallback(() => {
+    const nextState = redo();
+    if (!nextState) return;
+
+    applyDiagramState(nextState);
+    setSelectedCards(new Set());
+    setSelectedConnections(new Set());
+  }, [applyDiagramState, redo]);
 
   // Inicial: cria card central
   useEffect(() => {
     if (cards.length > 0) return;
 
-    const centerX = A4_WIDTH / 2 - 160;
-    const centerY = A4_HEIGHT / 2 - 110;
+    const centerX = ((containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH) / 2) - 160;
+    const centerY = ((containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT) / 2) - 110;
 
     const initialCard: CardType = {
       id: Date.now().toString(),
@@ -204,7 +331,7 @@ const Diagrama: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Util: conversão screen -> world
+  // Util: conversÃ£o screen -> world
   const screenToWorld = useCallback(
     (clientX: number, clientY: number): Point | null => {
       const rect = diagramRef.current?.getBoundingClientRect();
@@ -220,7 +347,7 @@ const Diagrama: React.FC = () => {
   // Util: achar card sob o mouse (world coords)
   const findCardAtPosition = useCallback(
     (x: number, y: number): CardType | null => {
-      // percorre na ordem natural; se você quiser priorizar “topmost”, teria que manter zIndex/layer
+      // percorre na ordem natural; se vocÃª quiser priorizar â€œtopmostâ€, teria que manter zIndex/layer
       for (const card of cards) {
         if (x >= card.x && x <= card.x + card.width && y >= card.y && y <= card.y + card.height) {
           return card;
@@ -249,7 +376,7 @@ const Diagrama: React.FC = () => {
     );
   }, []);
 
-  // Sequência
+  // SequÃªncia
   const getNextSequenceNumber = useCallback((): number => {
     const usedNumbers = cards.map((c) => c.sequence).sort((a, b) => a - b);
     for (let i = 1; i <= usedNumbers.length; i++) {
@@ -265,8 +392,6 @@ const Diagrama: React.FC = () => {
 
   const addCard = useCallback(
     (type: CardTypeEnum = 'default') => {
-      saveToHistory();
-
       const cW = containerRef.current?.clientWidth || 0;
       const cH = containerRef.current?.clientHeight || 0;
 
@@ -299,12 +424,14 @@ const Diagrama: React.FC = () => {
         type,
       };
 
-      setCards((prev) => [...prev, newCard]);
+      const nextState = { cards: [...cards, newCard], connections };
+      setCards(nextState.cards);
+      saveToHistory(nextState);
     },
-    [getNextSequenceNumber, saveToHistory, setCards]
+    [cards, connections, getNextSequenceNumber, saveToHistory, setCards]
   );
 
-  // Conexões
+  // ConexÃµes
   const cancelConnection = useCallback(() => {
     setIsConnecting(false);
     setConnectionStart(null);
@@ -312,64 +439,106 @@ const Diagrama: React.FC = () => {
   }, []);
 
   const createConnection = useCallback(
-    (fromId: string, toId: string, type: ConnectionType = 'normal', color: string = '#2563eb') => {
+    (
+      fromId: string,
+      toId: string,
+      type: ConnectionType = 'normal',
+      color: string = '#2563eb',
+      preferredFromSide?: ConnectionSide,
+      preferredToSide?: ConnectionSide,
+      routeStyle: ConnectionRouteStyle = connectionRouteStyle
+    ) => {
       const fromCard = cardMap.get(fromId);
       const toCard = cardMap.get(toId);
       if (!fromCard || !toCard) return;
 
-      // evita duplicar mesma conexão (mesmo sentido)
-      const alreadyExists = connections.some((c) => c.fromCard === fromId && c.toCard === toId);
-      if (alreadyExists) return;
-
-      const { fromSide, toSide } = calculateConnectionSides(fromCard, toCard);
+      const { fromSide, toSide } = resolveConnectionSides(fromCard, toCard, {
+        fromSide: preferredFromSide,
+        toSide: preferredToSide,
+      });
 
       const newConnection: Connection = {
         id: `${fromId}-${toId}-${Date.now()}`,
         fromCard: fromId,
         toCard: toId,
         type,
+        routeStyle,
         color,
         fromSide,
         toSide,
       };
 
-      setConnections((prev) => [...prev, newConnection]);
-      saveToHistory();
+      const nextState = { cards, connections: [...connections, newConnection] };
+      setConnections(nextState.connections);
+      saveToHistory(nextState);
     },
-    [cardMap, connections, saveToHistory, setConnections]
+    [cardMap, cards, connectionRouteStyle, connections, saveToHistory, setConnections]
   );
 
-  const handleConnectionStart = useCallback((cardId: string, point: Point) => {
+  const handleConnectionStart = useCallback((cardId: string, side: ConnectionSide, point: Point) => {
     setIsConnecting(true);
-    setConnectionStart({ cardId, point });
+    setConnectionStart({ cardId, point, side });
   }, []);
 
   const deleteSelected = useCallback(() => {
     if (selectedCards.size === 0 && selectedConnections.size === 0) return;
-
-    saveToHistory();
-
-    setCards((prev) => prev.filter((card) => !selectedCards.has(card.id)));
-
-    setConnections((prev) =>
-      prev.filter(
+    const nextState = {
+      cards: cards.filter((card) => !selectedCards.has(card.id)),
+      connections: connections.filter(
         (conn) =>
           !selectedConnections.has(conn.id) &&
           !selectedCards.has(conn.fromCard) &&
           !selectedCards.has(conn.toCard)
-      )
-    );
+      ),
+    };
+
+    setCards(nextState.cards);
+    setConnections(nextState.connections);
+    saveToHistory(nextState);
 
     setSelectedCards(new Set());
     setSelectedConnections(new Set());
-  }, [saveToHistory, selectedCards, selectedConnections, setCards, setConnections]);
+  }, [cards, connections, saveToHistory, selectedCards, selectedConnections, setCards, setConnections]);
+
+  const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
+    const nextConnections = connections.map((connection) =>
+      connection.id === connectionId ? { ...connection, ...updates } : connection
+    );
+    setConnections(nextConnections);
+    saveToHistory({ cards, connections: nextConnections });
+  }, [cards, connections, saveToHistory, setConnections]);
+
+  const invertConnection = useCallback((connectionId: string) => {
+    const current = connections.find((connection) => connection.id === connectionId);
+    if (!current) return;
+
+    const fromCard = cardMap.get(current.toCard);
+    const toCard = cardMap.get(current.fromCard);
+    if (!fromCard || !toCard) return;
+
+    const swappedSides = resolveConnectionSides(fromCard, toCard, {});
+    const nextConnections = connections.map((connection) =>
+      connection.id === connectionId
+        ? {
+            ...connection,
+            fromCard: current.toCard,
+            toCard: current.fromCard,
+            fromSide: swappedSides.fromSide,
+            toSide: swappedSides.toSide,
+          }
+        : connection
+    );
+
+    setConnections(nextConnections);
+    saveToHistory({ cards, connections: nextConnections });
+  }, [cardMap, cards, connections, saveToHistory, setConnections]);
 
   // Novo arquivo
   const handleNewFile = useCallback(() => {
     if (!window.confirm('Criar novo arquivo? Todas as alterações não salvas serão perdidas.')) return;
 
-    const centerX = A4_WIDTH / 2 - 75;
-    const centerY = A4_HEIGHT / 2 - 40;
+    const centerX = ((containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH) / 2) - 160;
+    const centerY = ((containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT) / 2) - 110;
 
     const initialCard: CardType = {
       id: Date.now().toString(),
@@ -392,251 +561,17 @@ const Diagrama: React.FC = () => {
       type: 'default',
     };
 
-    pushState({ cards: [initialCard], connections: [] });
-    setCards([initialCard]);
-    setConnections([]);
+    const nextState = { cards: [initialCard], connections: [] };
+
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+    pushState(nextState);
+    setCards(nextState.cards);
+    setConnections(nextState.connections);
     setSelectedCards(new Set());
     setSelectedConnections(new Set());
     setFileName('Diagrama sem título');
   }, [pushState, setCards, setConnections, setFileName]);
-
-    //Motor de exportação
-
-    const getBoundsForCards = (list: CardType[], padding: number): Bounds | null => {
-      if (!list.length) return null;
-    
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const c of list) {
-        minX = Math.min(minX, c.x);
-        minY = Math.min(minY, c.y);
-        maxX = Math.max(maxX, c.x + c.width);
-        maxY = Math.max(maxY, c.y + c.height);
-      }
-    
-      return {
-        x: minX - padding,
-        y: minY - padding,
-        width: (maxX - minX) + padding * 2,
-        height: (maxY - minY) + padding * 2,
-      };
-    };
-    
-    const getExportBounds = (opts: PrintOptions): Bounds | null => {
-      const list = opts.selectionOnly
-        ? cards.filter(c => selectedCards.has(c.id))
-        : cards;
-    
-      return getBoundsForCards(list, opts.margin);
-    };
-    
-    const svgStringToElement = (svg: string): SVGSVGElement => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(svg, 'image/svg+xml');
-      const el = doc.documentElement as unknown as SVGSVGElement;
-      return el;
-    };
-
-    const resolveOrientation = (
-      opts: PrintOptions,
-      bounds: Bounds
-    ) => {
-      let orientation: 'portrait' | 'landscape';
-    
-      if (opts.orientation === 'auto') {
-        orientation =
-          bounds.width > bounds.height ? 'landscape' : 'portrait';
-      } else {
-        orientation = opts.orientation;
-      }
-    
-      const width =
-        orientation === 'landscape' ? A4_HEIGHT : A4_WIDTH;
-    
-      const height =
-        orientation === 'landscape' ? A4_WIDTH : A4_HEIGHT;
-    
-      return { orientation, width, height };
-    };
-    
-    const renderSvgPageToPdf = async (pdf: jsPDF, svgString: string) => {
-      const svgEl = svgStringToElement(svgString);
-      // Render vetorial no PDF (sem rasterizar)
-      await (pdf as any).svg(svgEl, {
-        x: 0,
-        y: 0,
-        width: A4_WIDTH,
-        height: A4_HEIGHT,
-      });
-    };
-    
-    const exportFitOnePageVector = async (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return;
-    
-      const { orientation, width, height } =
-        resolveOrientation(opts, bounds);
-    
-      const pageViewBox: Bounds = { ...bounds };
-    
-      const svg = buildExportSvg({
-        cards,
-        connections,
-        bounds,
-        viewBox: pageViewBox,
-        opts: {
-          includeGrid: opts.includeGrid,
-          includeShadows: opts.includeShadows,
-          gridSize: GRID_SIZE,
-          background: '#ffffff',
-        },
-      });
-    
-      const pdf = new jsPDF({
-        orientation,
-        unit: 'px',
-        format: [width, height],
-      });
-    
-      await renderSvgPageToPdf(pdf, svg);
-      pdf.save(`${fileName}.pdf`);
-    };
-    
-    const exportCropMultipageVector = async (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return;
-    
-      // 👇 PRIMEIRO resolve orientação
-      const { orientation, width, height } =
-        resolveOrientation(opts, bounds);
-    
-      const exportScale = Math.max(0.2, opts.exportZoom || 1);
-    
-      const pageWorldW = width / exportScale;
-      const pageWorldH = height / exportScale;
-    
-      const cols = Math.ceil(bounds.width / pageWorldW);
-      const rows = Math.ceil(bounds.height / pageWorldH);
-    
-      const pdf = new jsPDF({
-        orientation,
-        unit: 'px',
-        format: [width, height],
-      });
-    
-      let pageIndex = 0;
-    
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const pageX = bounds.x + c * pageWorldW;
-          const pageY = bounds.y + r * pageWorldH;
-    
-          const viewBox: Bounds = {
-            x: pageX,
-            y: pageY,
-            width: pageWorldW,
-            height: pageWorldH,
-          };
-    
-          const svg = buildExportSvg({
-            cards,
-            connections,
-            bounds,
-            viewBox,
-            opts: {
-              includeGrid: opts.includeGrid,
-              includeShadows: opts.includeShadows,
-              gridSize: GRID_SIZE,
-              background: '#ffffff',
-            },
-          });
-    
-          if (pageIndex > 0)
-            pdf.addPage([width, height], orientation);
-    
-          await renderSvgPageToPdf(pdf, svg);
-          pageIndex++;
-        }
-      }
-    
-      pdf.save(`${fileName}.pdf`);
-    };
-    
-    const exportScaleToXYVector = async (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return;
-    
-      const { orientation, width, height } =
-        resolveOrientation(opts, bounds);
-    
-      const pagesX = Math.max(1, opts.pagesX);
-      const pagesY = Math.max(1, opts.pagesY);
-    
-      const ratioX = (width * pagesX) / bounds.width;
-      const ratioY = (height * pagesY) / bounds.height;
-      const ratio = Math.min(ratioX, ratioY);
-    
-      const totalWorldW = (width * pagesX) / ratio;
-      const totalWorldH = (height * pagesY) / ratio;
-    
-      const startX = bounds.x - (totalWorldW - bounds.width) / 2;
-      const startY = bounds.y - (totalWorldH - bounds.height) / 2;
-    
-      const pageWorldW = width / ratio;
-      const pageWorldH = height / ratio;
-    
-      const pdf = new jsPDF({
-        orientation,
-        unit: 'px',
-        format: [width, height],
-      });
-    
-      let pageIndex = 0;
-    
-      for (let r = 0; r < pagesY; r++) {
-        for (let c = 0; c < pagesX; c++) {
-          const viewBox: Bounds = {
-            x: startX + c * pageWorldW,
-            y: startY + r * pageWorldH,
-            width: pageWorldW,
-            height: pageWorldH,
-          };
-    
-          const svg = buildExportSvg({
-            cards,
-            connections,
-            bounds,
-            viewBox,
-            opts: {
-              includeGrid: opts.includeGrid,
-              includeShadows: opts.includeShadows,
-              gridSize: GRID_SIZE,
-              background: '#ffffff',
-            },
-          });
-    
-          if (pageIndex > 0)
-            pdf.addPage([width, height], orientation);
-    
-          await renderSvgPageToPdf(pdf, svg);
-          pageIndex++;
-        }
-      }
-    
-      pdf.save(`${fileName}.pdf`);
-    };
-    
-    const generatePdf = async (opts: PrintOptions) => {
-      setIsPrinting(true);
-      try {
-        if (opts.mode === 'fit') await exportFitOnePageVector(opts);
-        else if (opts.mode === 'scale') await exportScaleToXYVector(opts);
-        else await exportCropMultipageVector(opts);
-      } finally {
-        setIsPrinting(false);
-      }
-    };
-
-
   // Atalhos teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -657,25 +592,13 @@ const Diagrama: React.FC = () => {
 
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
-        const previousState = undo();
-        if (!previousState) return;
-
-        setCards(previousState.cards);
-        setConnections(previousState.connections);
-        setSelectedCards(new Set());
-        setSelectedConnections(new Set());
+        handleUndo();
         return;
       }
 
       if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
         e.preventDefault();
-        const nextState = redo();
-        if (!nextState) return;
-
-        setCards(nextState.cards);
-        setConnections(nextState.connections);
-        setSelectedCards(new Set());
-        setSelectedConnections(new Set());
+        handleRedo();
         return;
       }
 
@@ -709,13 +632,11 @@ const Diagrama: React.FC = () => {
     deleteSelected,
     handleNewFile,
     isConnecting,
-    redo,
-    setCards,
-    setConnections,
-    undo,
+    handleRedo,
+    handleUndo,
   ]);
 
-  // Wheel zoom (um único handler nativo) — evita recriar listener e bloqueia scroll do browser
+  // Wheel zoom (um Ãºnico handler nativo) â€” evita recriar listener e bloqueia scroll do browser
   useEffect(() => {
     const el = diagramRef.current;
     if (!el) return;
@@ -726,7 +647,7 @@ const Diagrama: React.FC = () => {
       const zoomIntensity = 0.001;
       const delta = -e.deltaY * zoomIntensity;
 
-      // vamos “travar” o ponto do mouse
+      // vamos â€œtravarâ€ o ponto do mouse
       const rect = el.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
@@ -734,7 +655,7 @@ const Diagrama: React.FC = () => {
       const prevScale = scaleRef.current;
       const prevOffset = offsetRef.current;
 
-      const newScale = clamp(prevScale + delta, 0.1, 5);
+        const newScale = clamp(prevScale + delta, ZOOM_MIN, ZOOM_MAX);
 
       const worldX = (mouseX - prevOffset.x) / prevScale;
       const worldY = (mouseY - prevOffset.y) / prevScale;
@@ -754,7 +675,7 @@ const Diagrama: React.FC = () => {
   // Mouse handlers
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
-      // Botão do meio -> zoom drag
+      // BotÃ£o do meio -> zoom drag
       if (e.button === 1) {
         e.preventDefault();
         setIsMiddleZooming(true);
@@ -771,7 +692,7 @@ const Diagrama: React.FC = () => {
 
       const target = e.target as HTMLElement;
 
-      // se clicou em card/conexão/ponto, não inicia selection box
+      // se clicou em card/conexÃ£o/ponto, nÃ£o inicia selection box
       if (target.closest('.card')) return;
       if (target.closest('.connection-point')) return;
       if (target.closest('.connection-line')) return;
@@ -795,6 +716,10 @@ const Diagrama: React.FC = () => {
     (worldX: number, worldY: number): void => {
       const deltaX = worldX - dragStart.x;
       const deltaY = worldY - dragStart.y;
+
+      if (deltaX !== 0 || deltaY !== 0) {
+        didDragCardsRef.current = true;
+      }
 
       setCards((prev) =>
         prev.map((card) => {
@@ -835,7 +760,7 @@ const Diagrama: React.FC = () => {
         const prevScale = scaleRef.current;
         const prevOffset = offsetRef.current;
 
-        const newScale = clamp(prevScale + delta, 0.1, 5);
+        const newScale = clamp(prevScale + delta, ZOOM_MIN, ZOOM_MAX);
 
         const worldX = (mouseX - prevOffset.x) / prevScale;
         const worldY = (mouseY - prevOffset.y) / prevScale;
@@ -897,17 +822,35 @@ const Diagrama: React.FC = () => {
       if (isDraggingCard) {
         setIsDraggingCard(false);
         setDraggedCards(new Map());
-        saveToHistory();
+        if (didDragCardsRef.current) {
+          suppressCardClickRef.current = true;
+          saveToHistory();
+        }
+        didDragCardsRef.current = false;
         return;
       }
 
-      if (isConnecting && connectionStart && world) {
-        const targetCard = findCardAtPosition(world.x, world.y);
-        if (targetCard && targetCard.id !== connectionStart.cardId) {
-          createConnection(connectionStart.cardId, targetCard.id, connectionType, connectionColor);
-        }
-        cancelConnection();
-        return;
+        if (isConnecting && connectionStart && world) {
+      const target = e.target as HTMLElement;
+      const targetPoint = target.closest<HTMLElement>('[data-connection-side]');
+      const targetCardId = targetPoint?.dataset.cardId;
+      const targetSide = targetPoint?.dataset.connectionSide as ConnectionSide | undefined;
+      const targetCard =
+        targetCardId ? cardMap.get(targetCardId) ?? null : findCardAtPosition(world.x, world.y);
+
+      if (targetCard && targetCard.id !== connectionStart.cardId) {
+        createConnection(
+          connectionStart.cardId,
+          targetCard.id,
+          connectionType,
+          connectionColor,
+          connectionStart.side,
+          targetSide,
+          connectionRouteStyle
+        );
+      }
+          cancelConnection();
+          return;
       }
 
       if (isDragging && world) {
@@ -933,8 +876,10 @@ const Diagrama: React.FC = () => {
     },
     [
       cancelConnection,
+      cardMap,
       cards,
       connectionColor,
+      connectionRouteStyle,
       connectionStart,
       connectionType,
       createConnection,
@@ -958,18 +903,29 @@ const Diagrama: React.FC = () => {
       const world = screenToWorld(e.clientX, e.clientY);
       if (!world) return;
 
-      setSelectedCards(new Set([id]));
+      const activeIds =
+        selectedCards.has(id) && selectedCards.size > 0
+          ? Array.from(selectedCards)
+          : [id];
+
+      if (!selectedCards.has(id)) {
+        setSelectedCards(new Set([id]));
+      }
       setSelectedConnections(new Set());
 
       setIsDraggingCard(true);
       setDragStart(world);
+      didDragCardsRef.current = false;
 
-      const card = cardMap.get(id);
-      if (!card) return;
-
-      setDraggedCards(new Map([[id, { startX: card.x, startY: card.y }]]));
+      const nextDraggedCards = new Map<string, { startX: number; startY: number }>();
+      for (const activeId of activeIds) {
+        const card = cardMap.get(activeId);
+        if (!card) continue;
+        nextDraggedCards.set(activeId, { startX: card.x, startY: card.y });
+      }
+      setDraggedCards(nextDraggedCards);
     },
-    [cardMap, screenToWorld]
+    [cardMap, screenToWorld, selectedCards]
   );
 
   // Grid visual
@@ -982,64 +938,41 @@ const Diagrama: React.FC = () => {
           linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
         `
         : 'none',
-      backgroundSize: `${GRID_SIZE * scale}px ${GRID_SIZE * scale}px`,
-      backgroundPosition: `
-        ${offset.x % (GRID_SIZE * scale)}px
-        ${offset.y % (GRID_SIZE * scale)}px
-      `,
+      backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+      backgroundPosition: '0 0',
     } as React.CSSProperties;
-  }, [offset.x, offset.y, scale, showGrid]);
+  }, [showGrid]);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100" ref={containerRef}>
-      {/* Barra de título */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600">📄</span>
-          <input
-            type="text"
-            value={fileName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFileName(e.target.value)}
-            className="font-medium text-gray-700 bg-transparent border border-transparent hover:border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-4 text-sm text-gray-500">
-          <span>{cards.length} cards</span>
-          <span>{connections.length} conexões</span>
-        </div>
-      </div>
-
-      {/* Toolbar Flutuante */}
+    <div className="relative flex h-screen flex-col bg-gray-100" ref={containerRef}>
       <FloatingToolbar
         onAddCard={addCard}
-        onDelete={deleteSelected}
-        onUndo={undo}
-        onRedo={redo}
-        onPrint={() => setShowPrintDialog(true)}
-        onNewFile={handleNewFile}
-        onEdit={() => {
-          if (selectedCards.size === 1) {
-            const id = Array.from(selectedCards)[0];
-            const card = cardMap.get(id);
-            if (card) setEditingCard(card);
-          }
-        }}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        hasSelection={selectedCards.size === 1}
         connectionType={connectionType}
         onConnectionTypeChange={setConnectionType}
+        connectionRouteStyle={connectionRouteStyle}
+        onConnectionRouteStyleChange={setConnectionRouteStyle}
         cardColor={
           selectedCards.size === 1
-            ? cardMap.get(Array.from(selectedCards)[0])?.accent || '#000'
-            : '#000'
+            ? cardMap.get(Array.from(selectedCards)[0])?.accent || '#2563EB'
+            : selectedCards.size === 0 && selectedConnections.size === 1
+            ? connections.find((connection) => connection.id === Array.from(selectedConnections)[0])?.color || '#2563EB'
+            : '#2563EB'
         }
         onCardColorChange={(color) => {
           if (selectedCards.size === 1) {
             const id = Array.from(selectedCards)[0];
-            updateCard(id, { accent: color });
-            saveToHistory();
+            const nextCards = cards.map((card) => (card.id === id ? { ...card, accent: color } : card));
+            setCards(nextCards);
+            saveToHistory({ cards: nextCards, connections });
+            return;
+          }
+
+          if (selectedConnections.size > 0) {
+            const nextConnections = connections.map((connection) =>
+              selectedConnections.has(connection.id) ? { ...connection, color } : connection
+            );
+            setConnections(nextConnections);
+            saveToHistory({ cards, connections: nextConnections });
           }
         }}
         showGrid={showGrid}
@@ -1047,15 +980,15 @@ const Diagrama: React.FC = () => {
         snapToGrid={snapToGrid}
         onSnapToGridChange={setSnapToGrid}
         scale={scale}
-        onZoomIn={() => setScale((s) => clamp(s + 0.1, 0.1, 3))}
-        onZoomOut={() => setScale((s) => clamp(s - 0.1, 0.1, 3))}
+        onZoomIn={() => setScale((s) => clamp(s + 0.1, ZOOM_MIN, ZOOM_MAX))}
+        onZoomOut={() => setScale((s) => clamp(s - 0.1, ZOOM_MIN, ZOOM_MAX))}
         onZoomReset={() => {
           setScale(1);
           setOffset({ x: 0, y: 0 });
         }}
       />
 
-      {/* Área do diagrama */}
+      {/* Ãrea do diagrama */}
       <div
         ref={diagramRef}
         data-diagram-canvas
@@ -1072,7 +1005,38 @@ const Diagrama: React.FC = () => {
           cancelConnection();
         }}
       >
-        {/* Camada transformável (mundo virtual) */}
+        <DiagramHeader
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          showSaveMenu={showSaveMenu}
+          saveMenuRef={saveMenuRef}
+          onToggleSaveMenu={() => setShowSaveMenu((value) => !value)}
+          onNewFile={handleNewFile}
+          onSavePng={async () => {
+            await saveAsPng();
+            setShowSaveMenu(false);
+          }}
+          onSaveSvg={async () => {
+            await saveAsSvg();
+            setShowSaveMenu(false);
+          }}
+          onSavePdf={async () => {
+            await saveAsPdf();
+            setShowSaveMenu(false);
+          }}
+          onPrint={() => setShowPrintDialog(true)}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canEdit={selectedCards.size === 1 || (selectedCards.size === 0 && selectedConnections.size === 1)}
+          onEdit={openSelectedCardEditor}
+          canDelete={selectedCards.size > 0 || selectedConnections.size > 0}
+          onDelete={deleteSelected}
+          cardsCount={cards.length}
+          connectionsCount={connections.length}
+        />
+
         <div
           ref={worldRef}
           className="absolute inset-0"
@@ -1082,7 +1046,7 @@ const Diagrama: React.FC = () => {
             willChange: 'transform',
           }}
         >
-          {/* SVG GLOBAL DE CONEXÕES */}
+          {/* SVG GLOBAL DE CONEXÃ•ES */}
           <svg
             className="absolute inset-0"
             style={{
@@ -1106,7 +1070,7 @@ const Diagrama: React.FC = () => {
               </marker>
             </defs>
 
-            {/* Conexões existentes */}
+            {/* ConexÃµes existentes */}
             {connections.map((conn) => {
               const fromCard = cardMap.get(conn.fromCard);
               const toCard = cardMap.get(conn.toCard);
@@ -1137,23 +1101,61 @@ const Diagrama: React.FC = () => {
               );
             })}
 
-            {/* Linha temporária ao conectar */}
-            {isConnecting && connectionStart && tempConnectionEnd && (
-              <line
-                x1={connectionStart.point.x}
-                y1={connectionStart.point.y}
-                x2={tempConnectionEnd.x}
-                y2={tempConnectionEnd.y}
-                stroke={connectionColor}
-                strokeWidth={2}
-                vectorEffect="non-scaling-stroke"
-                strokeDasharray={
-                  connectionType === 'dashed' ? '6,4' : connectionType === 'dotted' ? '2,4' : undefined
-                }
-                markerEnd="url(#arrow-head)"
-                style={{ pointerEvents: 'none' }}
-              />
-            )}
+            {/* Linha temporÃ¡ria ao conectar */}
+            {isConnecting && connectionStart && tempConnectionEnd && (() => {
+                  const hoveredCard = findCardAtPosition(tempConnectionEnd.x, tempConnectionEnd.y);
+                  const previewEnd =
+                    hoveredCard && hoveredCard.id !== connectionStart.cardId
+                      ? hoveredCard
+                      : null;
+
+              const previewGeometry = previewEnd
+                ? (() => {
+                    const targetSide = getClosestSideForPoint(previewEnd, connectionStart.point);
+                    const targetPoint = {
+                      x:
+                        targetSide === 'left'
+                          ? previewEnd.x
+                          : targetSide === 'right'
+                          ? previewEnd.x + previewEnd.width
+                          : previewEnd.x + previewEnd.width / 2,
+                      y:
+                        targetSide === 'top'
+                          ? previewEnd.y
+                          : targetSide === 'bottom'
+                          ? previewEnd.y + previewEnd.height
+                          : previewEnd.y + previewEnd.height / 2,
+                    };
+
+                    return getPreviewConnectionGeometry(
+                      connectionStart.point,
+                      targetPoint,
+                      connectionStart.side,
+                      connectionRouteStyle
+                    );
+                  })()
+                : getPreviewConnectionGeometry(
+                    connectionStart.point,
+                    tempConnectionEnd,
+                    connectionStart.side,
+                    connectionRouteStyle
+                  );
+
+              return (
+                <path
+                  d={previewGeometry.path}
+                  fill="none"
+                  stroke={connectionColor}
+                  strokeWidth={2}
+                  vectorEffect="non-scaling-stroke"
+                  strokeDasharray={
+                    connectionType === 'dashed' ? '6,4' : connectionType === 'dotted' ? '2,4' : undefined
+                  }
+                  markerEnd="url(#arrow-head)"
+                  style={{ pointerEvents: 'none' }}
+                />
+              );
+            })()}
           </svg>
 
           {/* Cards */}
@@ -1168,6 +1170,11 @@ const Diagrama: React.FC = () => {
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
 
+                  if (suppressCardClickRef.current) {
+                    suppressCardClickRef.current = false;
+                    return;
+                  }
+
                   if (e.ctrlKey || e.metaKey) {
                     setSelectedCards((prev) => {
                       const updated = new Set(prev);
@@ -1179,20 +1186,18 @@ const Diagrama: React.FC = () => {
                     setSelectedConnections(new Set());
                   }
                 }}
+                onDoubleClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  setEditingCard(card);
+                }}
                 onDragStart={(e: React.MouseEvent) => handleCardDragStart(card.id, e)}
                 onUpdate={(updates: Partial<CardType>) => updateCard(card.id, updates)}
-                onConnectionStart={(point: Point) => handleConnectionStart(card.id, point)}
-                onConnectionEnd={(targetCardId: string) => {
-                  if (connectionStart && targetCardId !== connectionStart.cardId) {
-                    createConnection(connectionStart.cardId, targetCardId, connectionType, connectionColor);
-                  }
-                  cancelConnection();
-                }}
+                onConnectionStart={(side: ConnectionSide, point: Point) => handleConnectionStart(card.id, side, point)}
               />
             ))}
           </div>
 
-          {/* Caixa de seleção */}
+          {/* Caixa de seleÃ§Ã£o */}
           {isDragging && (
             <div style={{ position: 'relative', zIndex: 30 }}>
               <SelectionBox start={dragStart} end={dragEnd} />
@@ -1201,27 +1206,47 @@ const Diagrama: React.FC = () => {
         </div>
       </div>
 
-      {/* Dialog de edição */}
+      {/* Dialog de ediÃ§Ã£o */}
       {editingCard && (
         <EditCardDialog
           card={editingCard}
           onSave={(updated: Partial<CardType> & { id: string }) => {
-            updateCard(updated.id, updated);
-            saveToHistory();
+            const nextCards = cards.map((card) =>
+              card.id === updated.id ? { ...card, ...updated } : card
+            );
+            setCards(nextCards);
+            saveToHistory({ cards: nextCards, connections });
             setEditingCard(null);
           }}
           onClose={() => setEditingCard(null)}
         />
       )}
 
+      {editingConnection && (
+        <ConnectionEditDialog
+          open={Boolean(editingConnection)}
+          connection={editingConnection}
+          onClose={() => setEditingConnectionId(null)}
+          onSave={(updates) => {
+            updateConnection(editingConnection.id, updates);
+            setEditingConnectionId(null);
+          }}
+          onInvert={() => invertConnection(editingConnection.id)}
+        />
+      )}
+
       <PrintDialog
         open={showPrintDialog}
         options={printOptions}
+        preview={printPreview}
         onChange={setPrintOptions}
         onClose={() => setShowPrintDialog(false)}
-        onConfirm={async () => {
+        onConfirmPdf={async () => {
           await generatePdf(printOptions);
           setShowPrintDialog(false);
+        }}
+        onPrint={async () => {
+          await printDocument(printOptions);
         }}
         canSelection={selectedCards.size > 0}
         isPrinting={isPrinting}
@@ -1232,3 +1257,4 @@ const Diagrama: React.FC = () => {
 };
 
 export default Diagrama;
+
