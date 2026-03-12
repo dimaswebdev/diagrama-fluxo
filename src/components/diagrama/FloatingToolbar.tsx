@@ -471,7 +471,7 @@ export default function FloatingToolbar({
             setShowModulesMenu(false);
           }
         }}
-        className="relative flex items-start gap-3 rounded-[26px] border border-white/75 bg-white/40 p-3 shadow "
+        className="relative flex items-start gap-3 rounded-[26px] border border-white/75 bg-white/60 p-3 shadow "
       >
         <div ref={toolbarColumnRef} className="flex flex-col gap-2">
           {modulesToRender.map((moduleId) => {
@@ -551,7 +551,7 @@ export default function FloatingToolbar({
 
         {activePanel && (
           <div
-            className={`absolute z-10 min-w-[240px] rounded-[22px] border border-slate-200/80 bg-white/40 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ${
+            className={`absolute z-10 min-w-[240px] rounded-[22px] border border-slate-200/80 bg-white/50 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ${
               panelSide === 'right' ? 'left-[calc(100%+12px)]' : 'right-[calc(100%+12px)]'
             }`}
             style={{ top: activePanelTop }}

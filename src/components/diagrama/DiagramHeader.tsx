@@ -62,24 +62,23 @@ export default function DiagramHeader({
       <div
         className="pointer-events-auto flex items-center gap-3 self-start rounded-[12px] px-4 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
         style={{
-              backgroundColor: 'rgba(11, 140, 166, 0.10)',
-              border: '1px solid rgba(11, 140, 166, 1)',
+              backgroundColor: 'rgba(37, 99, 235, 0.10)',
               color: 'rgba(11, 140, 166, 1)',
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-200/90 bg-cyan-50 text-cyan-700 shadow-[0_4px_12px_rgba(14,165,233,0.10)]">
-          <Clipboard className="h-5 w-5" />
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl   text-[#2563EB] shadow-[0_4px_12px_rgba(14,165,233,0.10)]">
+          <Clipboard className="h-10 w-10" />
         </div>
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-800">
             Diagrama de Fluxo
           </div>
           <input
             type="text"
             value={fileName}
             onChange={(e) => onFileNameChange(e.target.value)}
-            className="mt-1 w-full min-w-[220px] max-w-[460px] rounded-xl border border-transparent bg-transparent px-2 py-1 text-xl font-semibold text-cyan-900 outline-none transition hover:border-cyan-100 hover:bg-white/70 focus:border-cyan-200 focus:bg-white/80"
+            className="mt-1 w-full min-w-[220px] max-w-[460px] rounded-xl border border-transparent bg-transparent px-2 py-1 text-xl font-semibold text-[#2563EB] outline-none transition hover:border-cyan-100 hover:bg-white/70 focus:border-cyan-200 focus:bg-white/80"
           />
         </div>
       </div>
