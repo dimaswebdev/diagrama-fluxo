@@ -109,7 +109,7 @@ export default function DiagramHeader({
               <ChevronDown className="h-4 w-4" />
             </button>
             {showSaveMenu && (
-              <div className="absolute right-0 top-12 min-w-[180px] rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl">
+              <div className="absolute right-0 top-12 min-w-[180px] rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ">
                 <button
                   onClick={onSavePng}
                   className="ui-hover-surface block w-full rounded-xl px-3 py-2 text-left text-sm"
