@@ -99,6 +99,75 @@ const offsetPointBySide = (point: Point, side: ConnectionSide, amount: number): 
   };
 };
 
+const getCubicBezierPoint = (
+  start: Point,
+  controlPoint1: Point,
+  controlPoint2: Point,
+  end: Point,
+  t: number
+): Point => {
+  const inverse = 1 - t;
+  const inverseSquared = inverse * inverse;
+  const inverseCubed = inverseSquared * inverse;
+  const tSquared = t * t;
+  const tCubed = tSquared * t;
+
+  return {
+    x:
+      inverseCubed * start.x +
+      3 * inverseSquared * t * controlPoint1.x +
+      3 * inverse * tSquared * controlPoint2.x +
+      tCubed * end.x,
+    y:
+      inverseCubed * start.y +
+      3 * inverseSquared * t * controlPoint1.y +
+      3 * inverse * tSquared * controlPoint2.y +
+      tCubed * end.y,
+  };
+};
+
+const getCubicBezierMidpointByLength = (
+  start: Point,
+  controlPoint1: Point,
+  controlPoint2: Point,
+  end: Point
+): Point => {
+  const steps = 40;
+  const sampledPoints = Array.from({ length: steps + 1 }, (_, index) =>
+    getCubicBezierPoint(start, controlPoint1, controlPoint2, end, index / steps)
+  );
+
+  let totalLength = 0;
+  const lengths: number[] = [0];
+
+  for (let index = 1; index < sampledPoints.length; index += 1) {
+    totalLength += Math.hypot(
+      sampledPoints[index].x - sampledPoints[index - 1].x,
+      sampledPoints[index].y - sampledPoints[index - 1].y
+    );
+    lengths.push(totalLength);
+  }
+
+  const targetLength = totalLength / 2;
+
+  for (let index = 1; index < lengths.length; index += 1) {
+    if (lengths[index] >= targetLength) {
+      const previousLength = lengths[index - 1];
+      const segmentLength = lengths[index] - previousLength || 1;
+      const localRatio = (targetLength - previousLength) / segmentLength;
+      const previousPoint = sampledPoints[index - 1];
+      const currentPoint = sampledPoints[index];
+
+      return {
+        x: previousPoint.x + (currentPoint.x - previousPoint.x) * localRatio,
+        y: previousPoint.y + (currentPoint.y - previousPoint.y) * localRatio,
+      };
+    }
+  }
+
+  return sampledPoints[Math.floor(sampledPoints.length / 2)];
+};
+
 const getLongestSegmentMidpoint = (points: Point[]) => {
   let bestMidpoint = {
     x: (points[0].x + points[points.length - 1].x) / 2,
@@ -136,10 +205,7 @@ export function buildBezierPath(
   return {
     path: `M ${start.x} ${start.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${end.x} ${end.y}`,
     controlPoint2,
-    labelPoint: {
-      x: (start.x + end.x) / 2,
-      y: (start.y + end.y) / 2,
-    },
+    labelPoint: getCubicBezierMidpointByLength(start, controlPoint1, controlPoint2, end),
   };
 }
 

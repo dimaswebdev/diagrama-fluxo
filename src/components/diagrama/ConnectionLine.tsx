@@ -4,6 +4,8 @@ import React from 'react';
 import type { Card as CardType, Connection, ConnectionType } from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
 
+const LABEL_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
+
 interface ConnectionLineProps {
   fromCard: CardType;
   toCard: CardType;
@@ -99,7 +101,12 @@ export default function ConnectionLine({
               y={geometry.labelPoint.y + 3.5 / zoom}
               textAnchor="middle"
               className="select-none"
-              style={{ fontSize: 11 / zoom, fontWeight: 600, fill: strokeColor }}
+              style={{
+                fontFamily: LABEL_FONT_STACK,
+                fontSize: 11 / zoom,
+                fontWeight: 600,
+                fill: strokeColor,
+              }}
             >
               {label}
             </text>

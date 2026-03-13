@@ -11,6 +11,8 @@ export type ExportSvgOptions = {
 
 export type Bounds = { x: number; y: number; width: number; height: number };
 
+const SYSTEM_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
+
 const esc = (s: string) =>
   s
     .replaceAll('&', '&amp;')
@@ -39,6 +41,75 @@ function sidePoint(card: CardType, side: Side) {
  * Agora retorna também cp1 (último ponto de controle),
  * pois ele define a tangente final da curva.
  */
+function getCubicBezierPoint(
+  p0: { x: number; y: number },
+  cp0: { x: number; y: number },
+  cp1: { x: number; y: number },
+  p1: { x: number; y: number },
+  t: number
+) {
+  const inverse = 1 - t;
+  const inverseSquared = inverse * inverse;
+  const inverseCubed = inverseSquared * inverse;
+  const tSquared = t * t;
+  const tCubed = tSquared * t;
+
+  return {
+    x:
+      inverseCubed * p0.x +
+      3 * inverseSquared * t * cp0.x +
+      3 * inverse * tSquared * cp1.x +
+      tCubed * p1.x,
+    y:
+      inverseCubed * p0.y +
+      3 * inverseSquared * t * cp0.y +
+      3 * inverse * tSquared * cp1.y +
+      tCubed * p1.y,
+  };
+}
+
+function getCubicBezierMidpointByLength(
+  p0: { x: number; y: number },
+  cp0: { x: number; y: number },
+  cp1: { x: number; y: number },
+  p1: { x: number; y: number }
+) {
+  const steps = 40;
+  const sampledPoints = Array.from({ length: steps + 1 }, (_, index) =>
+    getCubicBezierPoint(p0, cp0, cp1, p1, index / steps)
+  );
+
+  let totalLength = 0;
+  const lengths: number[] = [0];
+
+  for (let index = 1; index < sampledPoints.length; index += 1) {
+    totalLength += Math.hypot(
+      sampledPoints[index].x - sampledPoints[index - 1].x,
+      sampledPoints[index].y - sampledPoints[index - 1].y
+    );
+    lengths.push(totalLength);
+  }
+
+  const targetLength = totalLength / 2;
+
+  for (let index = 1; index < lengths.length; index += 1) {
+    if (lengths[index] >= targetLength) {
+      const previousLength = lengths[index - 1];
+      const segmentLength = lengths[index] - previousLength || 1;
+      const localRatio = (targetLength - previousLength) / segmentLength;
+      const previousPoint = sampledPoints[index - 1];
+      const currentPoint = sampledPoints[index];
+
+      return {
+        x: previousPoint.x + (currentPoint.x - previousPoint.x) * localRatio,
+        y: previousPoint.y + (currentPoint.y - previousPoint.y) * localRatio,
+      };
+    }
+  }
+
+  return sampledPoints[Math.floor(sampledPoints.length / 2)];
+}
+
 function bezierPath(
   p0: { x: number; y: number },
   p1: { x: number; y: number },
@@ -71,6 +142,7 @@ function bezierPath(
   return {
     d: `M ${p0.x} ${p0.y} C ${cp0.x} ${cp0.y} ${cp1.x} ${cp1.y} ${p1.x} ${p1.y}`,
     cp1,
+    labelPoint: getCubicBezierMidpointByLength(p0, cp0, cp1, p1),
   };
 }
 
@@ -172,7 +244,35 @@ function orthogonalPath(
   }
 
   d += ` L ${p1.x} ${p1.y}`;
-  return { d, prevPoint: points[points.length - 2] };
+  return {
+    d,
+    prevPoint: points[points.length - 2],
+    labelPoint: getLongestSegmentMidpoint(points),
+  };
+}
+
+function getLongestSegmentMidpoint(points: Array<{ x: number; y: number }>) {
+  let bestMidpoint = {
+    x: (points[0].x + points[points.length - 1].x) / 2,
+    y: (points[0].y + points[points.length - 1].y) / 2,
+  };
+  let bestLength = -1;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+
+    if (length > bestLength) {
+      bestLength = length;
+      bestMidpoint = {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+      };
+    }
+  }
+
+  return bestMidpoint;
 }
 
 function arrowHead(
@@ -290,14 +390,14 @@ export function buildExportSvg(params: {
           />
 
           <text x="${c.x + 26}" y="${c.y + 30}" text-anchor="middle"
-            font-family="Inter, Arial, sans-serif"
+            font-family="${SYSTEM_FONT_STACK}"
             font-size="12"
             fill="#ffffff">
             ${esc(String(c.sequence ?? ''))}
           </text>
 
           <text x="${tx + 26}" y="${ty}"
-            font-family="Inter, Arial, sans-serif"
+            font-family="${SYSTEM_FONT_STACK}"
             font-size="14"
             font-weight="700"
             fill="#111827">
@@ -305,7 +405,7 @@ export function buildExportSvg(params: {
           </text>
 
           <text x="${tx + 26}" y="${ty + 16}"
-            font-family="Inter, Arial, sans-serif"
+            font-family="${SYSTEM_FONT_STACK}"
             font-size="10.5"
             fill="#6b7280">
             ${date}
@@ -319,7 +419,7 @@ export function buildExportSvg(params: {
                       `<text x="${tx + 26}" y="${
                         ty + 48 + i * 14
                       }"
-                        font-family="Inter, Arial, sans-serif"
+                        font-family="${SYSTEM_FONT_STACK}"
                         font-size="11.5"
                         fill="#374151">
                         ${esc(ln)}
@@ -334,7 +434,7 @@ export function buildExportSvg(params: {
               ? `<text x="${c.x + 18}" y="${
                   c.y + c.height - 14
                 }"
-                font-family="Inter, Arial, sans-serif"
+                font-family="${SYSTEM_FONT_STACK}"
                 font-size="10.5"
                 fill="#6b7280">
                 ${esc(c.label)}
@@ -375,8 +475,10 @@ export function buildExportSvg(params: {
       const poly = arrowHead(p1, 'cp1' in route ? route.cp1 : route.prevPoint, 10);
       const label = (conn.label || '').trim();
       const labelWidth = getLabelWidth(label);
-      const labelX = (p0.x + p1.x) / 2 - labelWidth / 2;
-      const labelY = (p0.y + p1.y) / 2 - 13;
+      const labelCenterX = 'labelPoint' in route ? route.labelPoint.x : (p0.x + p1.x) / 2;
+      const labelCenterY = 'labelPoint' in route ? route.labelPoint.y : (p0.y + p1.y) / 2;
+      const labelX = labelCenterX - labelWidth / 2;
+      const labelY = labelCenterY - 12;
 
       return `
         <g>
@@ -404,10 +506,10 @@ export function buildExportSvg(params: {
                     stroke-width="1.2"
                   />
                   <text
-                    x="${(p0.x + p1.x) / 2}"
-                    y="${(p0.y + p1.y) / 2 + 4}"
+                    x="${labelCenterX}"
+                    y="${labelCenterY + 3.5}"
                     text-anchor="middle"
-                    font-family="Inter, Arial, sans-serif"
+                    font-family="${SYSTEM_FONT_STACK}"
                     font-size="11"
                     font-weight="600"
                     fill="${stroke}">
