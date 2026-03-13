@@ -15,6 +15,10 @@ import FloatingToolbar from './FloatingToolbar';
 import DiagramHeader from './DiagramHeader';
 import { EditCardDialog } from './EditCardDialog';
 import ConnectionEditDialog from './ConnectionEditDialog';
+import {
+  getCenteredViewportTransform,
+  getFitViewportTransform,
+} from './viewport';
 
 import { useLocalStorage } from '@/hooks/diagrama/useLocalStorage';
 import { useDiagramExport } from '@/hooks/diagrama/useDiagramExport';
@@ -64,6 +68,7 @@ const CARD_WIDTH = 320;
 const CARD_HEIGHT = 220;
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = Number.POSITIVE_INFINITY;
+const VIEWPORT_MARGIN = 120;
 
 const Diagrama: React.FC = () => {
   // PersistÃªncia
@@ -101,12 +106,14 @@ const Diagrama: React.FC = () => {
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [isMiddleZooming, setIsMiddleZooming] = useState(false);
+  const [isCanvasMoveActive, setIsCanvasMoveActive] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
 
   //Estado de impressÃ£o
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
+  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
 
   const [printOptions, setPrintOptions] = useState<PrintOptions>({
     selectionOnly: false,
@@ -137,6 +144,8 @@ const Diagrama: React.FC = () => {
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const didDragCardsRef = useRef(false);
   const suppressCardClickRef = useRef(false);
+  const hasInitializedViewportRef = useRef(false);
+  const spacePanPressedRef = useRef(false);
 
   // Refs (para listener wheel nÃ£o depender de deps e nÃ£o recriar)
   const scaleRef = useRef(scale);
@@ -193,6 +202,43 @@ const Diagrama: React.FC = () => {
     },
     []
   );
+
+  const getViewportSize = useCallback(() => {
+    return {
+      width: containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH,
+      height: containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT,
+    };
+  }, []);
+
+  const applyViewportTransform = useCallback((nextScale: number, nextOffset: Point) => {
+    scaleRef.current = nextScale;
+    offsetRef.current = nextOffset;
+    setScale(nextScale);
+    setOffset(nextOffset);
+  }, []);
+
+  const centerCardInViewport = useCallback((card: CardType, targetScale = 1) => {
+    const transform = getCenteredViewportTransform(card, getViewportSize(), targetScale);
+    applyViewportTransform(transform.scale, transform.offset);
+  }, [applyViewportTransform, getViewportSize]);
+
+  const fitCardsToViewport = useCallback((items: CardType[]) => {
+    if (items.length === 0) return;
+
+    if (items.length === 1) {
+      centerCardInViewport(items[0], 1);
+      return;
+    }
+
+    const transform = getFitViewportTransform(items, getViewportSize(), {
+      margin: VIEWPORT_MARGIN,
+      minScale: ZOOM_MIN,
+      maxScale: 1,
+    });
+    if (!transform) return;
+
+    applyViewportTransform(transform.scale, transform.offset);
+  }, [applyViewportTransform, centerCardInViewport, getViewportSize]);
 
   const createCardAtPosition = useCallback((
     x: number,
@@ -296,40 +342,42 @@ const Diagrama: React.FC = () => {
     setSelectedConnections(new Set());
   }, [applyDiagramState, redo]);
 
-  // Inicial: cria card central
+  // Inicial: centraliza viewport ou cria card inicial
   useEffect(() => {
-    if (cards.length > 0) return;
+    if (hasInitializedViewportRef.current || !containerRef.current) return;
 
-    const centerX = ((containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH) / 2) - 160;
-    const centerY = ((containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT) / 2) - 110;
+    if (cards.length === 0) {
+      const baseScale = 1;
+      const baseOffset = { x: 0, y: 0 };
+      applyViewportTransform(baseScale, baseOffset);
 
-    const initialCard: CardType = {
-      id: Date.now().toString(),
-      x: centerX,
-      y: centerY,
-      width: 320,
-      height: 220,
+      const initialCard = createCenteredCard({
+        sequence: 1,
+        title: 'Evento 1',
+        label: 'INÍCIO',
+        accent: '#19B7C6',
+        scale: baseScale,
+        offset: baseOffset,
+      });
 
-      sequence: 1,
+      pushState({ cards: [initialCard], connections: [] });
+      setCards([initialCard]);
+      setConnections([]);
+      hasInitializedViewportRef.current = true;
+      return;
+    }
 
-      title: 'Evento 1',
-      content: 'Descreva o conteúdo aqui.',
-      summary: '',
-      tags: [],
-      label: 'INÍCIO',
-      date: new Date().toLocaleDateString('pt-BR'),
-      source: '',
-      accent: '#19B7C6',
-
-      type: 'default',
-    };
-
-    // snapshot e estado localstorage
-    pushState({ cards: [initialCard], connections: [] });
-    setCards([initialCard]);
-    setConnections([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    fitCardsToViewport(cards);
+    hasInitializedViewportRef.current = true;
+  }, [
+    applyViewportTransform,
+    cards,
+    createCenteredCard,
+    fitCardsToViewport,
+    pushState,
+    setCards,
+    setConnections,
+  ]);
 
   // Util: conversÃ£o screen -> world
   const screenToWorld = useCallback(
@@ -534,44 +582,39 @@ const Diagrama: React.FC = () => {
   }, [cardMap, cards, connections, saveToHistory, setConnections]);
 
   // Novo arquivo
-  const handleNewFile = useCallback(() => {
-    if (!window.confirm('Criar novo arquivo? Todas as alterações não salvas serão perdidas.')) return;
+  const confirmNewFile = useCallback(() => {
+    const baseScale = 1;
+    const baseOffset = { x: 0, y: 0 };
+    applyViewportTransform(baseScale, baseOffset);
 
-    const centerX = ((containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH) / 2) - 160;
-    const centerY = ((containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT) / 2) - 110;
-
-    const initialCard: CardType = {
-      id: Date.now().toString(),
-      x: centerX,
-      y: centerY,
-      width: 320,
-      height: 220,
-
+    const initialCard = createCenteredCard({
       sequence: 1,
-
       title: 'Evento 1',
-      content: 'Descreva o conteúdo aqui.',
-      summary: '',
-      tags: [],
       label: 'INÍCIO',
-      date: new Date().toLocaleDateString('pt-BR'),
-      source: '',
       accent: '#19B7C6',
-
-      type: 'default',
-    };
+      scale: baseScale,
+      offset: baseOffset,
+    });
 
     const nextState = { cards: [initialCard], connections: [] };
 
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
     pushState(nextState);
     setCards(nextState.cards);
     setConnections(nextState.connections);
     setSelectedCards(new Set());
     setSelectedConnections(new Set());
     setFileName('Diagrama sem título');
-  }, [pushState, setCards, setConnections, setFileName]);
+    setShowNewFileDialog(false);
+    hasInitializedViewportRef.current = true;
+  }, [applyViewportTransform, createCenteredCard, pushState, setCards, setConnections, setFileName]);
+
+  const handleNewFile = useCallback(() => {
+    setShowNewFileDialog(true);
+  }, []);
+
+  const handleFitView = useCallback(() => {
+    fitCardsToViewport(cards);
+  }, [cards, fitCardsToViewport]);
   // Atalhos teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -582,6 +625,11 @@ const Diagrama: React.FC = () => {
         (target?.getAttribute?.('contenteditable') === 'true');
 
       if (isTyping) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        spacePanPressedRef.current = true;
+      }
 
       if (e.ctrlKey && e.key === 'a') {
         e.preventDefault();
@@ -614,6 +662,12 @@ const Diagrama: React.FC = () => {
         return;
       }
 
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        handleFitView();
+        return;
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteSelected();
         return;
@@ -624,12 +678,23 @@ const Diagrama: React.FC = () => {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent): void => {
+      if (e.code === 'Space') {
+        spacePanPressedRef.current = false;
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [
     cards,
     cancelConnection,
     deleteSelected,
+    handleFitView,
     handleNewFile,
     isConnecting,
     handleRedo,
@@ -682,8 +747,8 @@ const Diagrama: React.FC = () => {
         return;
       }
 
-      // ALT + clique esquerdo -> pan
-      if (e.button === 0 && e.altKey) {
+      // ALT/Space/ferramenta ativa + clique esquerdo -> pan
+      if (e.button === 0 && (e.altKey || spacePanPressedRef.current || isCanvasMoveActive)) {
         e.preventDefault();
         setIsPanning(true);
         setPanStart({ x: e.clientX - offsetRef.current.x, y: e.clientY - offsetRef.current.y });
@@ -709,7 +774,7 @@ const Diagrama: React.FC = () => {
       setDragStart(world);
       setDragEnd(world);
     },
-    [screenToWorld]
+    [isCanvasMoveActive, screenToWorld]
   );
 
   const moveDraggedCards = useCallback(
@@ -983,9 +1048,11 @@ const Diagrama: React.FC = () => {
         onZoomIn={() => setScale((s) => clamp(s + 0.1, ZOOM_MIN, ZOOM_MAX))}
         onZoomOut={() => setScale((s) => clamp(s - 0.1, ZOOM_MIN, ZOOM_MAX))}
         onZoomReset={() => {
-          setScale(1);
-          setOffset({ x: 0, y: 0 });
+          applyViewportTransform(1, { x: 0, y: 0 });
         }}
+        onFitView={handleFitView}
+        isCanvasMoveActive={isCanvasMoveActive}
+        onToggleCanvasMove={() => setIsCanvasMoveActive((value) => !value)}
       />
 
       {/* Ãrea do diagrama */}
@@ -993,7 +1060,13 @@ const Diagrama: React.FC = () => {
         ref={diagramRef}
         data-diagram-canvas
         className={`flex-1 relative overflow-hidden select-none ${
-          isPanning ? 'cursor-grabbing' : isConnecting ? 'cursor-crosshair' : 'cursor-default'
+          isPanning
+            ? 'cursor-grabbing'
+            : isCanvasMoveActive
+            ? 'cursor-grab'
+            : isConnecting
+            ? 'cursor-crosshair'
+            : 'cursor-default'
         }`}
         style={gridStyle}
         onMouseDown={handleMouseDown}
@@ -1036,6 +1109,10 @@ const Diagrama: React.FC = () => {
           cardsCount={cards.length}
           connectionsCount={connections.length}
         />
+
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-white/75 bg-white/70 px-4 py-2 text-xs text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] backdrop-blur">
+          Scroll para zoom • Space/Alt + arrastar para mover • Ferramenta mover canvas na toolbar
+        </div>
 
         <div
           ref={worldRef}
@@ -1096,6 +1173,12 @@ const Diagrama: React.FC = () => {
                       setSelectedConnections(new Set([conn.id]));
                       setSelectedCards(new Set());
                     }
+                  }}
+                  onDoubleClick={(ev?: React.MouseEvent) => {
+                    ev?.stopPropagation();
+                    setSelectedConnections(new Set([conn.id]));
+                    setSelectedCards(new Set());
+                    setEditingConnectionId(conn.id);
                   }}
                 />
               );
@@ -1251,6 +1334,61 @@ const Diagrama: React.FC = () => {
         canSelection={selectedCards.size > 0}
         isPrinting={isPrinting}
       />
+
+      {showNewFileDialog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]"
+            onClick={() => setShowNewFileDialog(false)}
+          />
+
+          <div className="ui-soft-panel relative w-[min(520px,92vw)] rounded-[28px] border border-white/70 bg-white/88 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-cyan-700/55">
+                  Arquivo
+                </div>
+                <h2 className="mt-1 text-xl font-semibold text-slate-800">
+                  Criar novo arquivo?
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  O diagrama atual será substituído por um novo documento com um card inicial centralizado.
+                </p>
+              </div>
+
+              <button
+                className="ui-hover-surface h-10 w-10 rounded-xl text-slate-500"
+                onClick={() => setShowNewFileDialog(false)}
+                title="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-4">
+              <div className="text-sm font-semibold text-slate-700">O que vai acontecer</div>
+              <div className="mt-2 text-sm leading-6 text-slate-600">
+                Um novo diagrama será aberto imediatamente. O card inicial será criado no centro da tela e a visualização será reposicionada para começar limpa.
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setShowNewFileDialog(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="ui-active-surface h-11 rounded-xl border border-cyan-200 px-4 text-sm font-medium text-cyan-900"
+                onClick={confirmNewFile}
+              >
+                Criar novo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

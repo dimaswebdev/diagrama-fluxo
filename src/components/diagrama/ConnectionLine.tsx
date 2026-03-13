@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { Card as CardType, Connection, ConnectionType } from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
 
@@ -12,6 +12,7 @@ interface ConnectionLineProps {
   connection: Connection;
   isSelected?: boolean;
   onClick?: (e: React.MouseEvent<SVGGElement, MouseEvent>) => void;
+  onDoubleClick?: (e: React.MouseEvent<SVGGElement, MouseEvent>) => void;
   zoom?: number;
 }
 
@@ -38,24 +39,42 @@ export default function ConnectionLine({
   connection,
   isSelected,
   onClick,
+  onDoubleClick,
   zoom = 1,
 }: ConnectionLineProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const geometry = getConnectionGeometry(fromCard, toCard, {
     fromSide: connection.fromSide,
     toSide: connection.toSide,
   }, connection.routeStyle ?? 'bezier');
 
+  const isInteractive = isSelected || isHovered;
   const strokeColor = connection.color || (isSelected ? '#0891b2' : '#94a3b8');
-  const strokeWidth = (isSelected ? 3.2 : 2) / zoom;
-  const hitWidth = 14 / zoom;
+  const strokeWidth = (isSelected ? 3.25 : isHovered ? 2.45 : 2) / zoom;
+  const hitWidth = 18 / zoom;
 
   return (
     <g
       className="connection-line"
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseDown={(e) => e.stopPropagation()}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{ cursor: 'pointer', pointerEvents: 'all', color: strokeColor }}
     >
+      {isInteractive && (
+        <path
+          d={geometry.path}
+          fill="none"
+          stroke={strokeColor}
+          strokeOpacity={isSelected ? 0.18 : 0.1}
+          strokeWidth={(isSelected ? 8 : 6) / zoom}
+          strokeLinecap="round"
+          pointerEvents="none"
+        />
+      )}
+
       <path
         d={geometry.path}
         fill="none"
@@ -91,9 +110,9 @@ export default function ConnectionLine({
               width={metrics.width}
               height={metrics.height}
               rx={12 / zoom}
-              fill="rgba(255,255,255,0.72)"
+              fill={isInteractive ? 'rgba(255,255,255,0.84)' : 'rgba(255,255,255,0.72)'}
               stroke={strokeColor}
-              strokeOpacity={0.55}
+              strokeOpacity={isInteractive ? 0.7 : 0.55}
               strokeWidth={1.2 / zoom}
             />
             <text

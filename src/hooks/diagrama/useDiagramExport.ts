@@ -5,6 +5,11 @@ import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
 
 import { buildExportSvg, type Bounds } from '@/components/diagrama/exportSvg';
+import {
+  interBoldBase64,
+  interRegularBase64,
+  interSemiBoldBase64,
+} from '@/assets/fonts/interPdfFonts';
 import type { PrintMode, PrintOptions } from '@/components/diagrama/PrintDialog';
 import type { Card, Connection } from '@/types/diagrama';
 import { A4_HEIGHT, A4_WIDTH, GRID_SIZE } from '@/types/diagrama';
@@ -139,6 +144,30 @@ const makeResponsivePreviewSvg = (svg: string) =>
     .replace(/width="[^"]*"/, 'width="100%"')
     .replace(/height="[^"]*"/, 'height="100%"')
     .replace('<svg ', '<svg preserveAspectRatio="xMidYMid meet" ');
+
+const registerPdfFonts = (pdf: jsPDF) => {
+  const fontApi = pdf as jsPDF & {
+    addFileToVFS: (fileName: string, fileData: string) => void;
+    addFont: (
+      postScriptName: string,
+      id: string,
+      fontStyle: 'normal' | 'bold' | 'italic' | 'bolditalic'
+    ) => void;
+    getFontList: () => Record<string, string[]>;
+  };
+
+  const existingFonts = fontApi.getFontList();
+  if (existingFonts.Inter?.includes('normal') && existingFonts.Inter?.includes('bold')) {
+    return;
+  }
+
+  fontApi.addFileToVFS('Inter-Regular.ttf', interRegularBase64);
+  fontApi.addFont('Inter-Regular.ttf', 'Inter', 'normal');
+  fontApi.addFileToVFS('Inter-SemiBold.ttf', interSemiBoldBase64);
+  fontApi.addFont('Inter-SemiBold.ttf', 'Inter-SemiBold', 'normal');
+  fontApi.addFileToVFS('Inter-Bold.ttf', interBoldBase64);
+  fontApi.addFont('Inter-Bold.ttf', 'Inter', 'bold');
+};
 
 export function useDiagramExport({
   cards,
@@ -284,6 +313,9 @@ export function useDiagramExport({
   }, [downloadBlob, getPaperFramedExport, printOptions]);
 
   const renderSvgPageToPdf = useCallback(async (pdf: jsPDF, svgString: string, paper: PaperLayout) => {
+    registerPdfFonts(pdf);
+    pdf.setFont('Inter', 'normal');
+
     const svgElement = svgStringToElement(svgString);
 
     await (

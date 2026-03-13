@@ -14,7 +14,7 @@ type Props = {
 };
 
 const lineTypes: { value: ConnectionType; label: string }[] = [
-  { value: 'normal', label: 'Solida' },
+  { value: 'normal', label: 'Sólida' },
   { value: 'dashed', label: 'Tracejada' },
   { value: 'dotted', label: 'Pontilhada' },
 ];
@@ -57,9 +57,9 @@ export default function ConnectionEditDialog({
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-700/55">
-                Conexao
+                Conexão
               </div>
-              <h2 className="mt-1 text-xl font-semibold text-slate-800">Editar conexao</h2>
+              <h2 className="mt-1 text-xl font-semibold text-slate-800">Editar conexão</h2>
             </div>
           </div>
 
@@ -74,12 +74,12 @@ export default function ConnectionEditDialog({
 
         <div className="grid gap-4">
           <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Rotulo</span>
+            <span className="text-sm font-medium text-slate-700">Rótulo</span>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className="h-11 w-full rounded-xl border border-cyan-100 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
-              placeholder="Descreva esta conexao"
+              placeholder="Descreva esta conexão"
             />
           </label>
 
@@ -149,7 +149,7 @@ export default function ConnectionEditDialog({
             className="ui-active-surface h-11 rounded-xl border border-cyan-200 px-4 text-sm font-medium text-cyan-900"
             onClick={() => onSave({ label, color, type, routeStyle })}
           >
-            Salvar conexao
+            Salvar conexão
           </button>
         </div>
       </div>

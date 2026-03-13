@@ -11,6 +11,7 @@ import {
   LogOut,
   Magnet,
   Minus,
+  Move,
   Palette,
   Plus,
   Route,
@@ -39,6 +40,9 @@ interface FloatingToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onFitView: () => void;
+  isCanvasMoveActive: boolean;
+  onToggleCanvasMove: () => void;
 }
 
 type ModuleId = 'cards' | 'colors' | 'connections' | 'view' | 'zoom';
@@ -117,6 +121,9 @@ export default function FloatingToolbar({
   onZoomIn,
   onZoomOut,
   onZoomReset,
+  onFitView,
+  isCanvasMoveActive,
+  onToggleCanvasMove,
 }: FloatingToolbarProps) {
   const [position, setPosition] = useState({ x: 24, y: 152 });
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -322,13 +329,15 @@ export default function FloatingToolbar({
 
     if (activePanel === 'colors') {
       return (
-        <div className="grid grid-cols-4 gap-2.5">
+        <div className="mx-auto grid w-fit grid-cols-4 gap-x-1 gap-y-1.5">
           {cardColors.map((color) => (
             <button
               key={color}
               onClick={runAction(() => onCardColorChange(color))}
-              className={`h-8 w-8 rounded-full border-2 transition ${
-                cardColor === color ? 'scale-110 border-slate-800' : 'border-white hover:scale-105'
+              className={`h-7 w-7 rounded-full border transition ${
+                cardColor === color
+                  ? 'scale-105 border-slate-200 shadow-[0_0_0_1px_rgba(226,232,240,0.95),0_6px_14px_rgba(15,23,42,0.08)]'
+                  : 'border-white/90 hover:scale-105 hover:border-slate-100 hover:shadow-[0_4px_10px_rgba(15,23,42,0.06)]'
               }`}
               style={{ backgroundColor: color }}
               title={color}
@@ -454,6 +463,13 @@ export default function FloatingToolbar({
           <span>Resetar</span>
           <span className="font-semibold">{Math.round(scale * 100)}%</span>
         </button>
+        <button
+          onClick={runAction(onFitView)}
+          className="ui-hover-surface flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm"
+        >
+          <span>Ajustar à tela</span>
+          <span className="font-semibold text-slate-400">F</span>
+        </button>
       </div>
     );
   };
@@ -512,6 +528,17 @@ export default function FloatingToolbar({
           })}
 
           <button
+            onClick={runAction(onToggleCanvasMove)}
+            className={`flex items-center gap-3 rounded-2xl border px-3 py-2 transition ${
+              isCanvasMoveActive ? 'ui-active-surface' : 'ui-hover-surface'
+            } ${isCollapsed ? 'justify-center px-0 w-11 h-11' : ''}`}
+            title="Mover canvas"
+          >
+            <Move className="h-4.5 w-4.5" />
+            {!isCollapsed && <span className="text-sm font-medium">Mover canvas</span>}
+          </button>
+
+          <button
             ref={modulesButtonRef}
             onClick={runAction(() => {
               setPinnedPanel(null);
@@ -551,12 +578,16 @@ export default function FloatingToolbar({
 
         {activePanel && (
           <div
-            className={`absolute z-10 min-w-[240px] rounded-[22px] border border-slate-200/80 bg-white/50 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ${
+            className={`absolute z-10 rounded-[22px] border border-slate-200/80 bg-white/50 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ${
+              activePanel === 'colors' ? 'min-w-[188px] p-2' : 'min-w-[240px] p-3'
+            } ${
               panelSide === 'right' ? 'left-[calc(100%+12px)]' : 'right-[calc(100%+12px)]'
             }`}
             style={{ top: activePanelTop }}
           >
-            <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+            <div className={`font-semibold uppercase tracking-[0.24em] text-slate-400 ${
+              activePanel === 'colors' ? 'mb-2 text-[9px]' : 'mb-3 text-[10px]'
+            }`}>
               {moduleLabel[activePanel]}
             </div>
             {renderPanel()}

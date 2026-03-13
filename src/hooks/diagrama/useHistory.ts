@@ -2,12 +2,10 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { DiagramState } from '@/types/diagrama';
-
-const cloneState = (state: DiagramState): DiagramState => structuredClone(state);
+import { createHistoryManager } from './historyManager';
 
 export function useHistory(initialState: DiagramState) {
-  const historyRef = useRef<DiagramState[]>([cloneState(initialState)]);
-  const currentIndexRef = useRef(0);
+  const managerRef = useRef(createHistoryManager(initialState));
   const [, setVersion] = useState(0);
 
   const notify = useCallback(() => {
@@ -15,33 +13,28 @@ export function useHistory(initialState: DiagramState) {
   }, []);
 
   const pushState = useCallback((newState: DiagramState) => {
-    const nextHistory = historyRef.current.slice(0, currentIndexRef.current + 1);
-    nextHistory.push(cloneState(newState));
-    historyRef.current = nextHistory;
-    currentIndexRef.current = nextHistory.length - 1;
+    managerRef.current.pushState(newState);
     notify();
   }, [notify]);
 
   const undo = useCallback(() => {
-    if (currentIndexRef.current === 0) return null;
-
-    currentIndexRef.current -= 1;
+    const previousState = managerRef.current.undo();
+    if (!previousState) return null;
     notify();
-    return cloneState(historyRef.current[currentIndexRef.current]);
+    return previousState;
   }, [notify]);
 
   const redo = useCallback(() => {
-    if (currentIndexRef.current >= historyRef.current.length - 1) return null;
-
-    currentIndexRef.current += 1;
+    const nextState = managerRef.current.redo();
+    if (!nextState) return null;
     notify();
-    return cloneState(historyRef.current[currentIndexRef.current]);
+    return nextState;
   }, [notify]);
 
   return {
-    current: historyRef.current[currentIndexRef.current],
-    canUndo: currentIndexRef.current > 0,
-    canRedo: currentIndexRef.current < historyRef.current.length - 1,
+    current: managerRef.current.getCurrent(),
+    canUndo: managerRef.current.canUndo(),
+    canRedo: managerRef.current.canRedo(),
     pushState,
     undo,
     redo,

@@ -511,7 +511,7 @@ export function buildExportSvg(params: {
                     text-anchor="middle"
                     font-family="${SYSTEM_FONT_STACK}"
                     font-size="11"
-                    font-weight="600"
+                    font-weight="700"
                     fill="${stroke}">
                     ${esc(label)}
                   </text>

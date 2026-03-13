@@ -13,9 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-      </head>
+    <html lang="pt-BR">
+      <head />
       <body className="font-body antialiased">
         {children}
         <Toaster />
