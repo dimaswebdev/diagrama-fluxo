@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 
-import { buildBezierPath, buildOrthogonalPath, getConnectionGeometry, resolveConnectionSides } from '@/components/diagrama/connectionRouting';
+import {
+  buildBezierPath,
+  buildOrthogonalPath,
+  doesConnectionIntersectSelectionBox,
+  getConnectionGeometry,
+  resolveConnectionSides,
+} from '@/components/diagrama/connectionRouting';
 import { getCardsBounds, getCenteredViewportTransform, getFitViewportTransform } from '@/components/diagrama/viewport';
 import { createHistoryManager } from '@/hooks/diagrama/historyManager';
 import type { Card, DiagramState } from '@/types/diagrama';
@@ -83,6 +89,64 @@ run('connection geometry preserves preferred source side when valid', () => {
 
   assert.equal(geometry.fromSide, 'bottom');
   assert.equal(geometry.startPoint.y, 220);
+});
+
+run('connection geometry preserves explicit source and target sides', () => {
+  const geometry = getConnectionGeometry(
+    makeCard('a', 0, 0, 320, 220),
+    makeCard('b', 260, 380, 520, 220),
+    { fromSide: 'right', toSide: 'top' },
+    'orthogonal'
+  );
+
+  assert.equal(geometry.fromSide, 'right');
+  assert.equal(geometry.toSide, 'top');
+});
+
+run('orthogonal geometry keeps explicit exits outside resized cards', () => {
+  const from = makeCard('a', 520, 120, 280, 160);
+  const to = makeCard('b', 200, 360, 720, 220);
+  const geometry = getConnectionGeometry(
+    from,
+    to,
+    { fromSide: 'bottom', toSide: 'top' },
+    'orthogonal'
+  );
+
+  assert.equal(geometry.fromSide, 'bottom');
+  assert.equal(geometry.toSide, 'top');
+  assert.ok('points' in geometry);
+  assert.ok(geometry.points.length >= 4);
+  assert.ok(geometry.points[1].y > from.y + from.height);
+  assert.ok(geometry.points[geometry.points.length - 2].y < to.y);
+});
+
+run('selection box can capture orthogonal connections', () => {
+  const from = makeCard('a', 0, 0);
+  const to = makeCard('b', 520, 0);
+  const intersects = doesConnectionIntersectSelectionBox(
+    from,
+    to,
+    { x: 250, y: 90, width: 80, height: 60 },
+    { fromSide: 'right', toSide: 'left' },
+    'orthogonal'
+  );
+
+  assert.equal(intersects, true);
+});
+
+run('selection box can capture bezier connections', () => {
+  const from = makeCard('a', 0, 0);
+  const to = makeCard('b', 260, 380);
+  const intersects = doesConnectionIntersectSelectionBox(
+    from,
+    to,
+    { x: 150, y: 180, width: 120, height: 100 },
+    { fromSide: 'bottom', toSide: 'left' },
+    'bezier'
+  );
+
+  assert.equal(intersects, true);
 });
 
 run('getCardsBounds returns the union for multiple cards', () => {

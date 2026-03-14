@@ -426,7 +426,7 @@ export default function FloatingToolbar({
           >
             <span className="flex items-center gap-3">
               <Magnet className="h-4.5 w-4.5" />
-              <span>Snap no grid</span>
+              <span>Ajustar à grade</span>
             </span>
             <span className="text-[11px] font-semibold text-slate-400">M</span>
           </button>

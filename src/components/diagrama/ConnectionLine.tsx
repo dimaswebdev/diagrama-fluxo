@@ -33,7 +33,7 @@ function getLabelMetrics(label: string, zoom: number) {
   return { width, height };
 }
 
-export default function ConnectionLine({
+function ConnectionLine({
   fromCard,
   toCard,
   connection,
@@ -135,3 +135,13 @@ export default function ConnectionLine({
     </g>
   );
 }
+
+export default React.memo(ConnectionLine, (prev, next) => {
+  return (
+    prev.fromCard === next.fromCard &&
+    prev.toCard === next.toCard &&
+    prev.connection === next.connection &&
+    prev.isSelected === next.isSelected &&
+    prev.zoom === next.zoom
+  );
+});

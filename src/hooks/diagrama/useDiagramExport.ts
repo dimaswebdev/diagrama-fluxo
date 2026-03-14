@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
 
 import { buildExportSvg, type Bounds } from '@/components/diagrama/exportSvg';
+import { getConnectionGeometry } from '@/components/diagrama/connectionRouting';
 import {
   interBoldBase64,
   interRegularBase64,
@@ -41,6 +42,12 @@ type PaperLayout = {
   height: number;
 };
 
+type ExportScene = {
+  cards: Card[];
+  connections: Connection[];
+  bounds: Bounds;
+};
+
 const getBoundsForCards = (cards: Card[], padding: number): Bounds | null => {
   if (!cards.length) return null;
 
@@ -61,6 +68,56 @@ const getBoundsForCards = (cards: Card[], padding: number): Bounds | null => {
     y: minY - padding,
     width: maxX - minX + padding * 2,
     height: maxY - minY + padding * 2,
+  };
+};
+
+const expandBounds = (bounds: Bounds, point: { x: number; y: number }) => ({
+  x: Math.min(bounds.x, point.x),
+  y: Math.min(bounds.y, point.y),
+  width: Math.max(bounds.x + bounds.width, point.x) - Math.min(bounds.x, point.x),
+  height: Math.max(bounds.y + bounds.height, point.y) - Math.min(bounds.y, point.y),
+});
+
+const getSceneBounds = (cards: Card[], connections: Connection[], padding: number): Bounds | null => {
+  const cardBounds = getBoundsForCards(cards, 0);
+  if (!cardBounds) return null;
+
+  let bounds = { ...cardBounds };
+
+  for (const connection of connections) {
+    const fromCard = cards.find((card) => card.id === connection.fromCard);
+    const toCard = cards.find((card) => card.id === connection.toCard);
+    if (!fromCard || !toCard) continue;
+
+    const geometry = getConnectionGeometry(
+      fromCard,
+      toCard,
+      {
+        fromSide: connection.fromSide,
+        toSide: connection.toSide,
+      },
+      connection.routeStyle ?? 'bezier'
+    );
+
+    bounds = expandBounds(bounds, geometry.startPoint);
+    bounds = expandBounds(bounds, geometry.endPoint);
+    bounds = expandBounds(bounds, geometry.labelPoint);
+
+    if ('points' in geometry) {
+      for (const point of geometry.points) {
+        bounds = expandBounds(bounds, point);
+      }
+    } else {
+      bounds = expandBounds(bounds, geometry.controlPoint1);
+      bounds = expandBounds(bounds, geometry.controlPoint2);
+    }
+  }
+
+  return {
+    x: bounds.x - padding,
+    y: bounds.y - padding,
+    width: bounds.width + padding * 2,
+    height: bounds.height + padding * 2,
   };
 };
 
@@ -178,22 +235,32 @@ export function useDiagramExport({
 }: UseDiagramExportParams) {
   const [isPrinting, setIsPrinting] = useState(false);
 
-  const getExportBounds = useCallback(
-    (opts: PrintOptions): Bounds | null => {
+  const getExportScene = useCallback(
+    (opts: PrintOptions): ExportScene | null => {
       const sourceCards = opts.selectionOnly
         ? cards.filter((card) => selectedCardIds.has(card.id))
         : cards;
 
-      return getBoundsForCards(sourceCards, opts.margin);
+      const sourceCardIds = new Set(sourceCards.map((card) => card.id));
+      const sourceConnections = connections.filter(
+        (connection) =>
+          sourceCardIds.has(connection.fromCard) &&
+          sourceCardIds.has(connection.toCard)
+      );
+
+      const bounds = getSceneBounds(sourceCards, sourceConnections, opts.margin);
+      if (!bounds) return null;
+
+      return { cards: sourceCards, connections: sourceConnections, bounds };
     },
-    [cards, selectedCardIds]
+    [cards, connections, selectedCardIds]
   );
 
   const buildExportSvgForViewBox = useCallback(
-    (opts: PrintOptions, viewBox: Bounds) =>
+    (scene: { cards: Card[]; connections: Connection[] }, opts: PrintOptions, viewBox: Bounds) =>
       buildExportSvg({
-        cards,
-        connections,
+        cards: scene.cards,
+        connections: scene.connections,
         bounds: viewBox,
         viewBox,
         opts: {
@@ -203,21 +270,26 @@ export function useDiagramExport({
           background: '#ffffff',
         },
       }),
-    [cards, connections]
+    []
   );
 
   const getPaperFramedExport = useCallback(
     (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return null;
+      const scene = getExportScene(opts);
+      if (!scene) return null;
 
+      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
       const paper = resolvePaperLayout(opts, bounds);
       const viewBox = getFittedPageViewBox(bounds, paper);
-      const svg = buildExportSvgForViewBox(opts, viewBox);
+      const svg = buildExportSvgForViewBox(
+        { cards: sceneCards, connections: sceneConnections },
+        opts,
+        viewBox
+      );
 
-      return { bounds, paper, viewBox, svg };
+      return { bounds, paper, viewBox, svg, cards: sceneCards, connections: sceneConnections };
     },
-    [buildExportSvgForViewBox, getExportBounds]
+    [buildExportSvgForViewBox, getExportScene]
   );
 
   const downloadBlob = useCallback(
@@ -352,8 +424,9 @@ export function useDiagramExport({
 
   const exportCropMultipageVector = useCallback(
     async (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return;
+      const scene = getExportScene(opts);
+      if (!scene) return;
+      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
 
       const paper = resolvePaperLayout(opts, bounds);
       const exportScale = Math.max(0.2, opts.exportZoom || 1);
@@ -379,7 +452,11 @@ export function useDiagramExport({
             height: pageWorldH,
           };
 
-          const svg = buildExportSvgForViewBox(opts, viewBox);
+          const svg = buildExportSvgForViewBox(
+            { cards: sceneCards, connections: sceneConnections },
+            opts,
+            viewBox
+          );
 
           if (pageIndex > 0) {
             pdf.addPage([paper.width, paper.height], paper.orientation);
@@ -392,13 +469,14 @@ export function useDiagramExport({
 
       pdf.save(`${fileName}.pdf`);
     },
-    [buildExportSvgForViewBox, fileName, getExportBounds, renderSvgPageToPdf]
+    [buildExportSvgForViewBox, fileName, getExportScene, renderSvgPageToPdf]
   );
 
   const exportScaleToXYVector = useCallback(
     async (opts: PrintOptions) => {
-      const bounds = getExportBounds(opts);
-      if (!bounds) return;
+      const scene = getExportScene(opts);
+      if (!scene) return;
+      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
 
       const paper = resolvePaperLayout(opts, bounds);
       const pagesX = Math.max(1, opts.pagesX);
@@ -428,7 +506,11 @@ export function useDiagramExport({
             height: pageWorldH,
           };
 
-          const svg = buildExportSvgForViewBox(opts, viewBox);
+          const svg = buildExportSvgForViewBox(
+            { cards: sceneCards, connections: sceneConnections },
+            opts,
+            viewBox
+          );
 
           if (pageIndex > 0) {
             pdf.addPage([paper.width, paper.height], paper.orientation);
@@ -441,7 +523,7 @@ export function useDiagramExport({
 
       pdf.save(`${fileName}.pdf`);
     },
-    [buildExportSvgForViewBox, fileName, getExportBounds, renderSvgPageToPdf]
+    [buildExportSvgForViewBox, fileName, getExportScene, renderSvgPageToPdf]
   );
 
   const generatePdf = useCallback(

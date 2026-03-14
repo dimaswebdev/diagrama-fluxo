@@ -1,4 +1,5 @@
 import type { Card as CardType, Connection } from '@/types/diagrama';
+import { getConnectionGeometry } from './connectionRouting';
 
 type Side = 'left' | 'right' | 'top' | 'bottom';
 
@@ -453,16 +454,15 @@ export function buildExportSvg(params: {
       const to = cards.find((x) => x.id === conn.toCard);
       if (!from || !to) return '';
 
-      const fromSide = (conn.fromSide as Side) || 'right';
-      const toSide = (conn.toSide as Side) || 'left';
-
-      const p0 = sidePoint(from, fromSide);
-      const p1 = sidePoint(to, toSide);
-
-      const route =
-        conn.routeStyle === 'orthogonal'
-          ? orthogonalPath(p0, p1, fromSide, toSide)
-          : bezierPath(p0, p1, fromSide, toSide);
+      const geometry = getConnectionGeometry(
+        from,
+        to,
+        {
+          fromSide: conn.fromSide,
+          toSide: conn.toSide,
+        },
+        conn.routeStyle ?? 'bezier'
+      );
 
       const stroke = conn.color || '#2563eb';
       const dash =
@@ -472,17 +472,17 @@ export function buildExportSvg(params: {
           ? '2 5'
           : '';
 
-      const poly = arrowHead(p1, 'cp1' in route ? route.cp1 : route.prevPoint, 10);
+      const poly = arrowHead(geometry.endPoint, geometry.arrowReferencePoint, 10);
       const label = (conn.label || '').trim();
       const labelWidth = getLabelWidth(label);
-      const labelCenterX = 'labelPoint' in route ? route.labelPoint.x : (p0.x + p1.x) / 2;
-      const labelCenterY = 'labelPoint' in route ? route.labelPoint.y : (p0.y + p1.y) / 2;
+      const labelCenterX = geometry.labelPoint.x;
+      const labelCenterY = geometry.labelPoint.y;
       const labelX = labelCenterX - labelWidth / 2;
       const labelY = labelCenterY - 12;
 
       return `
         <g>
-          <path d="${route.d}"
+          <path d="${geometry.path}"
             fill="none"
             stroke="${stroke}"
             stroke-width="2"
