@@ -7,7 +7,12 @@ import type {
   GroupBox,
 } from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
-import { buildOrthogonalEmphasisStrokeShape } from './connectionEmphasisShape';
+import {
+  buildBezierEmphasisArrowHead,
+  buildBezierEmphasisStrokeShape,
+  buildEmphasisArrowHead,
+  buildOrthogonalEmphasisStrokeShape,
+} from './connectionEmphasisShape';
 
 type Side = 'left' | 'right' | 'top' | 'bottom';
 
@@ -644,13 +649,28 @@ export function buildExportSvg(params: {
 
       const poly =
         variant === 'emphasis'
-          ? arrowPolygon(geometry.endPoint, geometry.arrowReferencePoint, Math.max(22, strokeWidth * 2.4), Math.max(10, strokeWidth * 0.95))
+          ? (
+              conn.routeStyle === 'bezier'
+                ? buildBezierEmphasisArrowHead(geometry.endPoint, geometry.arrowReferencePoint, strokeWidth)
+                : buildEmphasisArrowHead(geometry.endPoint, geometry.arrowReferencePoint, strokeWidth)
+            ).points
           : arrowHead(geometry.endPoint, geometry.arrowReferencePoint, 10);
       const emphasisStrokeShape =
         variant === 'emphasis' &&
         conn.routeStyle === 'orthogonal' &&
         'points' in geometry
           ? buildOrthogonalEmphasisStrokeShape(geometry.points, strokeWidth)
+          : variant === 'emphasis' &&
+            conn.routeStyle === 'bezier' &&
+            'controlPoint1' in geometry &&
+            'controlPoint2' in geometry
+          ? buildBezierEmphasisStrokeShape(
+              geometry.startPoint,
+              geometry.controlPoint1,
+              geometry.controlPoint2,
+              geometry.endPoint,
+              strokeWidth
+            )
           : null;
       const label = (conn.label || '').trim();
       const labelWidth = getLabelWidth(label);
@@ -667,14 +687,14 @@ export function buildExportSvg(params: {
                    fill="none"
                    stroke="${stroke}"
                    stroke-width="${strokeWidth}"
-                   stroke-linecap="butt"
+                   stroke-linecap="round"
                    stroke-linejoin="round" />
                  <polygon points="${emphasisStrokeShape.arrowPolygon}" fill="${stroke}" />`
               : `<path d="${geometry.path}"
             fill="none"
             stroke="${stroke}"
             stroke-width="${strokeWidth}"
-            stroke-linecap="${variant === 'emphasis' ? 'butt' : 'round'}"
+            stroke-linecap="round"
             stroke-linejoin="round"
             ${dash ? `stroke-dasharray="${dash}"` : ''} />
           <polygon points="${poly}" fill="${stroke}" />`

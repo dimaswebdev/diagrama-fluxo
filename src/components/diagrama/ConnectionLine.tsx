@@ -9,7 +9,12 @@ import type {
   ConnectionVariant,
 } from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
-import { buildOrthogonalEmphasisStrokeShape } from './connectionEmphasisShape';
+import {
+  buildBezierEmphasisArrowHead,
+  buildBezierEmphasisStrokeShape,
+  buildEmphasisArrowHead,
+  buildOrthogonalEmphasisStrokeShape,
+} from './connectionEmphasisShape';
 
 const LABEL_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
 
@@ -111,19 +116,37 @@ function ConnectionLine({
   const baseStrokeWidth = getBaseStrokeWidth(connection.strokeWidth, variant);
   const strokeWidth = (baseStrokeWidth + (isSelected ? 1.2 : isHovered ? 0.45 : 0)) / zoom;
   const hitWidth = Math.max(18, baseStrokeWidth * (variant === 'emphasis' ? 4.5 : 5)) / zoom;
-  const arrowLength = (variant === 'emphasis' ? Math.max(22, baseStrokeWidth * 2.4) : 10) / zoom;
-  const arrowHalfWidth = (variant === 'emphasis' ? Math.max(10, baseStrokeWidth * 0.95) : 4.5) / zoom;
-  const arrowPolygon = getArrowPolygonPoints(
-    geometry.endPoint,
-    geometry.arrowReferencePoint,
-    arrowLength,
-    arrowHalfWidth
-  );
+  const defaultArrowLength = 10 / zoom;
+  const defaultArrowHalfWidth = 4.5 / zoom;
+  const arrowPolygon =
+    variant === 'emphasis'
+      ? (
+          connection.routeStyle === 'bezier'
+            ? buildBezierEmphasisArrowHead(geometry.endPoint, geometry.arrowReferencePoint, strokeWidth)
+            : buildEmphasisArrowHead(geometry.endPoint, geometry.arrowReferencePoint, strokeWidth)
+        ).points
+      : getArrowPolygonPoints(
+          geometry.endPoint,
+          geometry.arrowReferencePoint,
+          defaultArrowLength,
+          defaultArrowHalfWidth
+        );
   const emphasisStrokeShape =
     variant === 'emphasis' &&
     connection.routeStyle === 'orthogonal' &&
     'points' in geometry
       ? buildOrthogonalEmphasisStrokeShape(geometry.points, strokeWidth)
+      : variant === 'emphasis' &&
+        connection.routeStyle === 'bezier' &&
+        'controlPoint1' in geometry &&
+        'controlPoint2' in geometry
+      ? buildBezierEmphasisStrokeShape(
+          geometry.startPoint,
+          geometry.controlPoint1,
+          geometry.controlPoint2,
+          geometry.endPoint,
+          strokeWidth
+        )
       : null;
 
   return (
@@ -182,7 +205,7 @@ function ConnectionLine({
             fill="none"
             stroke={strokeColor}
             strokeWidth={strokeWidth}
-            strokeLinecap={variant === 'emphasis' ? 'butt' : 'round'}
+            strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={dashArray(connection.type)}
             markerEnd={variant === 'emphasis' ? undefined : getArrowMarkerId(variant)}
