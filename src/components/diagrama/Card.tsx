@@ -83,6 +83,10 @@ function Card({
     [card.content, card.height]
   );
   const isCompactCard = card.width < 250 || card.height < 170;
+  const titleFontSize = card.textStyle?.fontSize ?? (isCompactCard ? 16 : 18);
+  const contentFontSize = Math.max(12, Math.round((card.textStyle?.fontSize ?? 14) * 0.9));
+  const cardTextAlign = card.textStyle?.textAlign ?? 'left';
+  const cardTextColor = card.textStyle?.color ?? '#111827';
   const semanticTitleClass = isCompactCard ? 'text-base' : 'text-lg';
   const semanticBodyClass = isCompactCard ? 'text-[13px] leading-5' : 'text-sm leading-6';
   const basePaddingClass = isCompactCard ? 'p-3' : 'p-4';
@@ -163,12 +167,22 @@ function Card({
             </div>
 
             <div>
-              <div className="font-semibold leading-tight text-gray-800">{card.title}</div>
+              <div className="font-semibold leading-tight" style={{ fontSize: titleFontSize, color: cardTextColor, textAlign: cardTextAlign }}>{card.title}</div>
               <div className="text-xs text-gray-500">{card.date}</div>
             </div>
           </div>
 
-          <div className={`flex-1 overflow-hidden text-gray-700 ${defaultContentClass}`}>{card.content}</div>
+          <div
+            className={`flex-1 overflow-hidden ${defaultContentClass}`}
+            style={{
+              color: cardTextColor,
+              fontSize: contentFontSize,
+              lineHeight: card.textStyle?.lineHeight ?? 1.45,
+              textAlign: cardTextAlign,
+            }}
+          >
+            {card.content}
+          </div>
 
           {card.tags && card.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">

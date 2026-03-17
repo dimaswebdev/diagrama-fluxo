@@ -1,4 +1,4 @@
-import type { Card as CardType, Connection } from '@/types/diagrama';
+import type { Card as CardType, Connection, DiagramText, GroupBox } from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
 
 type Side = 'left' | 'right' | 'top' | 'bottom';
@@ -320,11 +320,13 @@ function getLabelWidth(label: string) {
 export function buildExportSvg(params: {
   cards: CardType[];
   connections: Connection[];
+  texts: DiagramText[];
+  groupBoxes: GroupBox[];
   bounds: Bounds;
   viewBox: Bounds;
   opts: ExportSvgOptions;
 }) {
-  const { cards, connections, viewBox, opts } = params;
+  const { cards, connections, texts, groupBoxes, viewBox, opts } = params;
 
   const vb = `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`;
 
@@ -356,6 +358,36 @@ export function buildExportSvg(params: {
         return `<g>${lines.join('')}</g>`;
       })()
     : '';
+
+  const groupSvg = groupBoxes
+    .map((groupBox) => {
+      const title = esc(groupBox.title);
+      return `
+        <g>
+          <rect x="${groupBox.x}" y="${groupBox.y}" width="${groupBox.width}" height="${groupBox.height}"
+            rx="28" ry="28"
+            fill="${groupBox.background}"
+            stroke="${groupBox.accent}"
+            stroke-width="1.5"
+          />
+          <rect x="${groupBox.x + 18}" y="${groupBox.y + 16}" width="${groupBox.width - 36}" height="42"
+            rx="14" ry="14"
+            fill="rgba(255,255,255,0.58)"
+            stroke="rgba(255,255,255,0.72)"
+            stroke-width="1"
+          />
+          <text x="${groupBox.x + groupBox.width / 2}" y="${groupBox.y + 42}"
+            text-anchor="middle"
+            font-family="${SYSTEM_FONT_STACK}"
+            font-size="${groupBox.titleStyle.fontSize}"
+            font-weight="${groupBox.titleStyle.fontWeight ?? 700}"
+            fill="${groupBox.titleStyle.color ?? '#111827'}">
+            ${title}
+          </text>
+        </g>
+      `;
+    })
+    .join('');
 
   // CARDS
   const cardSvg = cards
@@ -399,9 +431,9 @@ export function buildExportSvg(params: {
 
           <text x="${tx + 26}" y="${ty}"
             font-family="${SYSTEM_FONT_STACK}"
-            font-size="14"
-            font-weight="700"
-            fill="#111827">
+            font-size="${c.textStyle?.fontSize ?? 14}"
+            font-weight="${c.textStyle?.fontWeight ?? 700}"
+            fill="${c.textStyle?.color ?? '#111827'}">
             ${title}
           </text>
 
@@ -421,8 +453,8 @@ export function buildExportSvg(params: {
                         ty + 48 + i * 14
                       }"
                         font-family="${SYSTEM_FONT_STACK}"
-                        font-size="11.5"
-                        fill="#374151">
+                        font-size="${Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)}"
+                        fill="${c.textStyle?.color ?? '#374151'}">
                         ${esc(ln)}
                       </text>`
                   )
@@ -442,6 +474,30 @@ export function buildExportSvg(params: {
               </text>`
               : ''
           }
+        </g>
+      `;
+    })
+    .join('');
+
+  const textSvg = texts
+    .map((item) => {
+      const lines = (item.text || '').split('\n').filter(Boolean);
+      const startY = item.y + item.textStyle.fontSize;
+      return `
+        <g>
+          ${item.background ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="18" fill="${item.background}" />` : ''}
+          ${lines
+            .map(
+              (line, index) => `<text
+                x="${item.textStyle.textAlign === 'center' ? item.x + item.width / 2 : item.x + 12}"
+                y="${startY + index * item.textStyle.fontSize * (item.textStyle.lineHeight ?? 1.15)}"
+                ${item.textStyle.textAlign === 'center' ? 'text-anchor="middle"' : ''}
+                font-family="${SYSTEM_FONT_STACK}"
+                font-size="${item.textStyle.fontSize}"
+                font-weight="${item.textStyle.fontWeight ?? 700}"
+                fill="${item.textStyle.color ?? '#111827'}">${esc(line)}</text>`
+            )
+            .join('')}
         </g>
       `;
     })
@@ -534,8 +590,10 @@ export function buildExportSvg(params: {
           fill="${opts.background}" />
     ${grid}
     <g>
+      ${groupSvg}
       ${connSvg}
       ${cardSvg}
+      ${textSvg}
     </g>
   </svg>
   `;

@@ -12,12 +12,14 @@ import {
   interSemiBoldBase64,
 } from '@/assets/fonts/interPdfFonts';
 import type { PrintMode, PrintOptions } from '@/components/diagrama/PrintDialog';
-import type { Card, Connection } from '@/types/diagrama';
+import type { Card, Connection, DiagramText, GroupBox } from '@/types/diagrama';
 import { A4_HEIGHT, A4_WIDTH, GRID_SIZE } from '@/types/diagrama';
 
 type UseDiagramExportParams = {
   cards: Card[];
   connections: Connection[];
+  texts: DiagramText[];
+  groupBoxes: GroupBox[];
   fileName: string;
   printOptions: PrintOptions;
   selectedCardIds: Set<string>;
@@ -45,6 +47,8 @@ type PaperLayout = {
 type ExportScene = {
   cards: Card[];
   connections: Connection[];
+  texts: DiagramText[];
+  groupBoxes: GroupBox[];
   bounds: Bounds;
 };
 
@@ -78,11 +82,29 @@ const expandBounds = (bounds: Bounds, point: { x: number; y: number }) => ({
   height: Math.max(bounds.y + bounds.height, point.y) - Math.min(bounds.y, point.y),
 });
 
-const getSceneBounds = (cards: Card[], connections: Connection[], padding: number): Bounds | null => {
+const getSceneBounds = (cards: Card[], connections: Connection[], texts: DiagramText[], groupBoxes: GroupBox[], padding: number): Bounds | null => {
   const cardBounds = getBoundsForCards(cards, 0);
-  if (!cardBounds) return null;
+  const extraBounds = [...texts, ...groupBoxes];
+  const fallbackBounds = extraBounds.length
+    ? {
+        x: Math.min(...extraBounds.map((item) => item.x)),
+        y: Math.min(...extraBounds.map((item) => item.y)),
+        width:
+          Math.max(...extraBounds.map((item) => item.x + item.width)) -
+          Math.min(...extraBounds.map((item) => item.x)),
+        height:
+          Math.max(...extraBounds.map((item) => item.y + item.height)) -
+          Math.min(...extraBounds.map((item) => item.y)),
+      }
+    : null;
+  if (!cardBounds && !fallbackBounds) return null;
 
-  let bounds = { ...cardBounds };
+  let bounds = { ...(cardBounds ?? fallbackBounds!) };
+
+  for (const item of extraBounds) {
+    bounds = expandBounds(bounds, { x: item.x, y: item.y });
+    bounds = expandBounds(bounds, { x: item.x + item.width, y: item.y + item.height });
+  }
 
   for (const connection of connections) {
     const fromCard = cards.find((card) => card.id === connection.fromCard);
@@ -229,6 +251,8 @@ const registerPdfFonts = (pdf: jsPDF) => {
 export function useDiagramExport({
   cards,
   connections,
+  texts,
+  groupBoxes,
   fileName,
   printOptions,
   selectedCardIds,
@@ -247,20 +271,24 @@ export function useDiagramExport({
           sourceCardIds.has(connection.fromCard) &&
           sourceCardIds.has(connection.toCard)
       );
+      const sourceTexts = opts.selectionOnly ? [] : texts;
+      const sourceGroupBoxes = opts.selectionOnly ? [] : groupBoxes;
 
-      const bounds = getSceneBounds(sourceCards, sourceConnections, opts.margin);
+      const bounds = getSceneBounds(sourceCards, sourceConnections, sourceTexts, sourceGroupBoxes, opts.margin);
       if (!bounds) return null;
 
-      return { cards: sourceCards, connections: sourceConnections, bounds };
+      return { cards: sourceCards, connections: sourceConnections, texts: sourceTexts, groupBoxes: sourceGroupBoxes, bounds };
     },
-    [cards, connections, selectedCardIds]
+    [cards, connections, groupBoxes, selectedCardIds, texts]
   );
 
   const buildExportSvgForViewBox = useCallback(
-    (scene: { cards: Card[]; connections: Connection[] }, opts: PrintOptions, viewBox: Bounds) =>
+    (scene: { cards: Card[]; connections: Connection[]; texts: DiagramText[]; groupBoxes: GroupBox[] }, opts: PrintOptions, viewBox: Bounds) =>
       buildExportSvg({
         cards: scene.cards,
         connections: scene.connections,
+        texts: scene.texts,
+        groupBoxes: scene.groupBoxes,
         bounds: viewBox,
         viewBox,
         opts: {
@@ -278,16 +306,16 @@ export function useDiagramExport({
       const scene = getExportScene(opts);
       if (!scene) return null;
 
-      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
+      const { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes, bounds } = scene;
       const paper = resolvePaperLayout(opts, bounds);
       const viewBox = getFittedPageViewBox(bounds, paper);
       const svg = buildExportSvgForViewBox(
-        { cards: sceneCards, connections: sceneConnections },
+        { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes },
         opts,
         viewBox
       );
 
-      return { bounds, paper, viewBox, svg, cards: sceneCards, connections: sceneConnections };
+      return { bounds, paper, viewBox, svg, cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes };
     },
     [buildExportSvgForViewBox, getExportScene]
   );
@@ -426,7 +454,7 @@ export function useDiagramExport({
     async (opts: PrintOptions) => {
       const scene = getExportScene(opts);
       if (!scene) return;
-      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
+      const { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes, bounds } = scene;
 
       const paper = resolvePaperLayout(opts, bounds);
       const exportScale = Math.max(0.2, opts.exportZoom || 1);
@@ -453,7 +481,7 @@ export function useDiagramExport({
           };
 
           const svg = buildExportSvgForViewBox(
-            { cards: sceneCards, connections: sceneConnections },
+            { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes },
             opts,
             viewBox
           );
@@ -476,7 +504,7 @@ export function useDiagramExport({
     async (opts: PrintOptions) => {
       const scene = getExportScene(opts);
       if (!scene) return;
-      const { cards: sceneCards, connections: sceneConnections, bounds } = scene;
+      const { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes, bounds } = scene;
 
       const paper = resolvePaperLayout(opts, bounds);
       const pagesX = Math.max(1, opts.pagesX);
@@ -507,7 +535,7 @@ export function useDiagramExport({
           };
 
           const svg = buildExportSvgForViewBox(
-            { cards: sceneCards, connections: sceneConnections },
+            { cards: sceneCards, connections: sceneConnections, texts: sceneTexts, groupBoxes: sceneGroupBoxes },
             opts,
             viewBox
           );

@@ -31,11 +31,20 @@ const makeCard = (id: string, x: number, y: number, width = 320, height = 220): 
   date: '10/03/2026',
   source: '',
   accent: '#2563EB',
+  textStyle: {
+    fontSize: 14,
+    fontWeight: 700,
+    textAlign: 'left',
+    lineHeight: 1.45,
+    color: '#111827',
+  },
 });
 
 const makeState = (cardId: string): DiagramState => ({
   cards: [makeCard(cardId, 0, 0)],
   connections: [],
+  texts: [],
+  groupBoxes: [],
 });
 
 run('history manager performs undo and redo in order', () => {

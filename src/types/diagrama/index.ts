@@ -13,8 +13,41 @@ export interface Card {
   date: string;
   source: string;
   accent: string;
+  textStyle?: TextStyle;
 
   type?: CardType;
+}
+
+export interface TextStyle {
+  fontSize: number;
+  fontWeight?: 400 | 500 | 600 | 700;
+  textAlign?: 'left' | 'center';
+  lineHeight?: number;
+  color?: string;
+}
+
+export interface DiagramText {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  accent: string;
+  background?: string;
+  textStyle: TextStyle;
+}
+
+export interface GroupBox {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+  accent: string;
+  background: string;
+  titleStyle: TextStyle;
 }
 
 export interface Connection {
@@ -37,6 +70,8 @@ export interface Point {
 export interface DiagramState {
   cards: Card[];
   connections: Connection[];
+  texts: DiagramText[];
+  groupBoxes: GroupBox[];
 }
 
 export interface SelectionBox {

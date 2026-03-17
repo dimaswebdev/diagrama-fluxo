@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDot,
+  AlignCenter,
+  AlignLeft,
   Grid3X3,
   HelpCircle,
   LogIn,
@@ -19,6 +21,7 @@ import {
   SlidersHorizontal,
   Square,
   Spline,
+  Type,
   UnfoldVertical,
 } from 'lucide-react';
 
@@ -26,6 +29,13 @@ import { CardType, ConnectionRouteStyle, ConnectionType } from '@/types/diagrama
 
 interface FloatingToolbarProps {
   onAddCard: (type?: CardType) => void;
+  onAddText: () => void;
+  onAddGroupBox: () => void;
+  canAdjustTypography: boolean;
+  typographySize: number;
+  typographyAlign: 'left' | 'center';
+  onTypographySizeChange: (size: number) => void;
+  onTypographyAlignChange: (align: 'left' | 'center') => void;
   connectionType: ConnectionType;
   onConnectionTypeChange: (type: ConnectionType) => void;
   connectionRouteStyle: ConnectionRouteStyle;
@@ -107,6 +117,13 @@ const defaultModules: ModuleId[] = ['cards', 'colors', 'connections', 'view', 'z
 
 export default function FloatingToolbar({
   onAddCard,
+  onAddText,
+  onAddGroupBox,
+  canAdjustTypography,
+  typographySize,
+  typographyAlign,
+  onTypographySizeChange,
+  onTypographyAlignChange,
   connectionType,
   onConnectionTypeChange,
   connectionRouteStyle,
@@ -323,6 +340,70 @@ export default function FloatingToolbar({
               </span>
             </button>
           ))}
+          <button
+            onClick={runAction(onAddText)}
+            className="ui-hover-surface flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm"
+          >
+            <span className="flex items-center gap-3">
+              <Type className="h-4.5 w-4.5" />
+              <span>Texto</span>
+            </span>
+            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              +
+            </span>
+          </button>
+          <button
+            onClick={runAction(onAddGroupBox)}
+            className="ui-hover-surface flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm"
+          >
+            <span className="flex items-center gap-3">
+              <Square className="h-4.5 w-4.5" />
+              <span>Agrupamento</span>
+            </span>
+            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              +
+            </span>
+          </button>
+          {canAdjustTypography && (
+            <div className="mt-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2">
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Tipografia
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={runAction(() => onTypographySizeChange(Math.max(10, typographySize - 2)))}
+                  className="ui-hover-surface rounded-xl px-2.5 py-2 text-sm font-semibold"
+                >
+                  A-
+                </button>
+                <div className="min-w-[46px] rounded-xl border border-slate-200/80 bg-white/80 px-2 py-2 text-center text-sm font-semibold text-slate-700">
+                  {typographySize}px
+                </div>
+                <button
+                  onClick={runAction(() => onTypographySizeChange(Math.min(48, typographySize + 2)))}
+                  className="ui-hover-surface rounded-xl px-2.5 py-2 text-sm font-semibold"
+                >
+                  A+
+                </button>
+                <button
+                  onClick={runAction(() => onTypographyAlignChange('left'))}
+                  className={`rounded-xl px-2.5 py-2 transition ${
+                    typographyAlign === 'left' ? 'ui-active-surface' : 'ui-hover-surface'
+                  }`}
+                >
+                  <AlignLeft className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={runAction(() => onTypographyAlignChange('center'))}
+                  className={`rounded-xl px-2.5 py-2 transition ${
+                    typographyAlign === 'center' ? 'ui-active-surface' : 'ui-hover-surface'
+                  }`}
+                >
+                  <AlignCenter className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
