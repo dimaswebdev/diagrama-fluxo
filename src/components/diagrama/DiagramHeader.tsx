@@ -32,6 +32,10 @@ interface DiagramHeaderProps {
   onEdit: () => void;
   canDuplicate: boolean;
   onDuplicate: () => void;
+  canGroup: boolean;
+  onGroup: () => void;
+  canUngroup: boolean;
+  onUngroup: () => void;
   canDelete: boolean;
   onDelete: () => void;
   cardsCount: number;
@@ -57,6 +61,10 @@ export default function DiagramHeader({
   onEdit,
   canDuplicate,
   onDuplicate,
+  canGroup,
+  onGroup,
+  canUngroup,
+  onUngroup,
   canDelete,
   onDelete,
   cardsCount,
@@ -188,6 +196,26 @@ export default function DiagramHeader({
             title="Duplicar selecionado"
           >
             <Copy className="h-4.5 w-4.5" />
+          </button>
+          <button
+            onClick={onGroup}
+            disabled={!canGroup}
+            className={`flex rounded-xl px-3 py-2 text-sm font-medium transition ${
+              canGroup ? 'ui-active-surface' : 'ui-disabled-surface'
+            }`}
+            title="Agrupar selecionados"
+          >
+            Agrupar
+          </button>
+          <button
+            onClick={onUngroup}
+            disabled={!canUngroup}
+            className={`flex rounded-xl px-3 py-2 text-sm font-medium transition ${
+              canUngroup ? 'ui-active-surface' : 'ui-disabled-surface'
+            }`}
+            title="Desagrupar selecionados"
+          >
+            Desagrupar
           </button>
           <button
             onClick={onDelete}

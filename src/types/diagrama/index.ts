@@ -1,5 +1,6 @@
 export interface Card {
   id: string;
+  groupId?: string;
   x: number;
   y: number;
   width: number;
@@ -29,6 +30,7 @@ export interface TextStyle {
 
 export interface DiagramText {
   id: string;
+  groupId?: string;
   x: number;
   y: number;
   width: number;
@@ -43,6 +45,7 @@ export interface DiagramText {
 
 export interface GroupBox {
   id: string;
+  groupId?: string;
   x: number;
   y: number;
   width: number;

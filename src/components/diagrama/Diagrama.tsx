@@ -525,6 +525,96 @@ const Diagrama: React.FC = () => {
     });
   }, [createCardAtPosition, getViewportCenterWorld]);
 
+  const getExpandedSelectionIds = useCallback(
+    (seed: {
+      cards?: Iterable<string>;
+      texts?: Iterable<string>;
+      groupBoxes?: Iterable<string>;
+    }) => {
+      const cardIds = new Set(seed.cards ?? []);
+      const textIds = new Set(seed.texts ?? []);
+      const groupBoxIds = new Set(seed.groupBoxes ?? []);
+      const groupIds = new Set<string>();
+
+      for (const card of cards) {
+        if (cardIds.has(card.id) && card.groupId) groupIds.add(card.groupId);
+      }
+      for (const item of texts) {
+        if (textIds.has(item.id) && item.groupId) groupIds.add(item.groupId);
+      }
+      for (const item of groupBoxes) {
+        if (groupBoxIds.has(item.id) && item.groupId) groupIds.add(item.groupId);
+      }
+
+      if (groupIds.size > 0) {
+        for (const card of cards) {
+          if (card.groupId && groupIds.has(card.groupId)) cardIds.add(card.id);
+        }
+        for (const item of texts) {
+          if (item.groupId && groupIds.has(item.groupId)) textIds.add(item.id);
+        }
+        for (const item of groupBoxes) {
+          if (item.groupId && groupIds.has(item.groupId)) groupBoxIds.add(item.id);
+        }
+      }
+
+      return { cardIds, textIds, groupBoxIds };
+    },
+    [cards, groupBoxes, texts]
+  );
+
+  const beginExpandedSelectionDrag = useCallback(
+    (
+      seed:
+        | { cards: Set<string>; texts: Set<string>; groupBoxes: Set<string> }
+        | { cards?: Set<string>; texts?: Set<string>; groupBoxes?: Set<string> },
+      world: Point
+    ) => {
+      const expanded = getExpandedSelectionIds({
+        cards: seed.cards ?? new Set<string>(),
+        texts: seed.texts ?? new Set<string>(),
+        groupBoxes: seed.groupBoxes ?? new Set<string>(),
+      });
+
+      setSelectedCards(expanded.cardIds);
+      setSelectedTexts(expanded.textIds);
+      setSelectedGroupBoxes(expanded.groupBoxIds);
+      setSelectedConnections(new Set());
+
+      setDragStart(world);
+      didDragCardsRef.current = false;
+
+      const nextDraggedCards = new Map<string, { startX: number; startY: number }>();
+      expanded.cardIds.forEach((cardId) => {
+        const card = cardMap.get(cardId);
+        if (!card) return;
+        nextDraggedCards.set(cardId, { startX: card.x, startY: card.y });
+      });
+      setDraggedCards(nextDraggedCards);
+
+      const nextDraggedTexts = new Map<string, { startX: number; startY: number }>();
+      expanded.textIds.forEach((textId) => {
+        const item = texts.find((text) => text.id === textId);
+        if (!item) return;
+        nextDraggedTexts.set(textId, { startX: item.x, startY: item.y });
+      });
+      setDraggedTexts(nextDraggedTexts);
+
+      const nextDraggedGroupBoxes = new Map<string, { startX: number; startY: number }>();
+      expanded.groupBoxIds.forEach((groupBoxId) => {
+        const item = groupBoxes.find((groupBox) => groupBox.id === groupBoxId);
+        if (!item) return;
+        nextDraggedGroupBoxes.set(groupBoxId, { startX: item.x, startY: item.y });
+      });
+      setDraggedGroupBoxes(nextDraggedGroupBoxes);
+
+      if (expanded.cardIds.size > 0) setIsDraggingCard(true);
+      if (expanded.textIds.size > 0) setIsDraggingText(true);
+      if (expanded.groupBoxIds.size > 0) setIsDraggingGroupBox(true);
+    },
+    [cardMap, getExpandedSelectionIds, groupBoxes, texts]
+  );
+
   const editingConnection = useMemo(
     () => connections.find((connection) => connection.id === editingConnectionId) ?? null,
     [connections, editingConnectionId]
@@ -1600,6 +1690,7 @@ const Diagrama: React.FC = () => {
         return {
           ...card,
           id,
+          groupId: card.groupId,
           x: card.x + DUPLICATE_OFFSET,
           y: card.y + DUPLICATE_OFFSET,
           sequence: card.sequence,
@@ -1609,6 +1700,7 @@ const Diagrama: React.FC = () => {
     const duplicatedTexts = selectedTextItems.map((item) => ({
       ...item,
       id: createUniqueId(),
+      groupId: item.groupId,
       x: item.x + DUPLICATE_OFFSET,
       y: item.y + DUPLICATE_OFFSET,
     }));
@@ -1616,6 +1708,7 @@ const Diagrama: React.FC = () => {
     const duplicatedGroupBoxes = selectedGroupItems.map((item) => ({
       ...item,
       id: createUniqueId(),
+      groupId: item.groupId,
       x: item.x + DUPLICATE_OFFSET,
       y: item.y + DUPLICATE_OFFSET,
     }));
@@ -1664,6 +1757,87 @@ const Diagrama: React.FC = () => {
     selectedTexts,
     setCards,
     setConnections,
+    setGroupBoxes,
+    setTexts,
+    texts,
+  ]);
+
+  const groupSelectedElements = useCallback(() => {
+    const selectedCount = selectedCards.size + selectedTexts.size + selectedGroupBoxes.size;
+    if (selectedCount < 2) return;
+
+    const groupId = createUniqueId();
+    const nextCards = cards.map((card) =>
+      selectedCards.has(card.id) ? { ...card, groupId } : card
+    );
+    const nextTexts = texts.map((item) =>
+      selectedTexts.has(item.id) ? { ...item, groupId } : item
+    );
+    const nextGroupBoxes = groupBoxes.map((item) =>
+      selectedGroupBoxes.has(item.id) ? { ...item, groupId } : item
+    );
+
+    setCards(nextCards);
+    setTexts(nextTexts);
+    setGroupBoxes(nextGroupBoxes);
+    saveToHistory(
+      getDiagramState({ cards: nextCards, texts: nextTexts, groupBoxes: nextGroupBoxes })
+    );
+  }, [
+    cards,
+    getDiagramState,
+    groupBoxes,
+    saveToHistory,
+    selectedCards,
+    selectedGroupBoxes,
+    selectedTexts,
+    setCards,
+    setGroupBoxes,
+    setTexts,
+    texts,
+  ]);
+
+  const ungroupSelectedElements = useCallback(() => {
+    const expanded = getExpandedSelectionIds({
+      cards: selectedCards,
+      texts: selectedTexts,
+      groupBoxes: selectedGroupBoxes,
+    });
+
+    if (
+      expanded.cardIds.size === 0 &&
+      expanded.textIds.size === 0 &&
+      expanded.groupBoxIds.size === 0
+    ) {
+      return;
+    }
+
+    const nextCards = cards.map((card) =>
+      expanded.cardIds.has(card.id) ? { ...card, groupId: undefined } : card
+    );
+    const nextTexts = texts.map((item) =>
+      expanded.textIds.has(item.id) ? { ...item, groupId: undefined } : item
+    );
+    const nextGroupBoxes = groupBoxes.map((item) =>
+      expanded.groupBoxIds.has(item.id) ? { ...item, groupId: undefined } : item
+    );
+
+    setCards(nextCards);
+    setTexts(nextTexts);
+    setGroupBoxes(nextGroupBoxes);
+    saveToHistory(
+      getDiagramState({ cards: nextCards, texts: nextTexts, groupBoxes: nextGroupBoxes })
+    );
+  }, [
+    cards,
+    getDiagramState,
+    getExpandedSelectionIds,
+    groupBoxes,
+    saveToHistory,
+    selectedCards,
+    selectedGroupBoxes,
+    selectedTexts,
+    setCards,
     setGroupBoxes,
     setTexts,
     texts,
@@ -1788,6 +1962,18 @@ const Diagrama: React.FC = () => {
         return;
       }
 
+      if (e.ctrlKey && e.key.toLowerCase() === 'g' && !e.shiftKey) {
+        e.preventDefault();
+        groupSelectedElements();
+        return;
+      }
+
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        ungroupSelectedElements();
+        return;
+      }
+
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
         setShowPrintDialog(true);
@@ -1827,11 +2013,13 @@ const Diagrama: React.FC = () => {
     cancelConnection,
     deleteSelected,
     duplicateSelection,
+    groupSelectedElements,
     handleFitView,
     handleNewFile,
     isConnecting,
     handleRedo,
     handleUndo,
+    ungroupSelectedElements,
   ]);
 
   // Wheel zoom (um Ãºnico handler nativo) â€” evita recriar listener e bloqueia scroll do browser
@@ -2040,6 +2228,10 @@ const Diagrama: React.FC = () => {
       const deltaX = worldX - dragStartRef.current.x;
       const deltaY = worldY - dragStartRef.current.y;
 
+      if (deltaX !== 0 || deltaY !== 0) {
+        didDragCardsRef.current = true;
+      }
+
       setTexts((prev) =>
         prev.map((item) => {
           const dragged = draggedTextsRef.current.get(item.id);
@@ -2064,6 +2256,10 @@ const Diagrama: React.FC = () => {
     (worldX: number, worldY: number) => {
       const deltaX = worldX - dragStartRef.current.x;
       const deltaY = worldY - dragStartRef.current.y;
+
+      if (deltaX !== 0 || deltaY !== 0) {
+        didDragCardsRef.current = true;
+      }
 
       setGroupBoxes((prev) =>
         prev.map((item) => {
@@ -2167,18 +2363,16 @@ const Diagrama: React.FC = () => {
         return;
       }
 
-      if (isDraggingCard) {
-        scheduleDraggedCards(world.x, world.y);
-        return;
-      }
-
-      if (isDraggingText) {
-        moveDraggedTexts(world.x, world.y);
-        return;
-      }
-
-      if (isDraggingGroupBox) {
-        moveDraggedGroupBoxes(world.x, world.y);
+      if (isDraggingCard || isDraggingText || isDraggingGroupBox) {
+        if (isDraggingCard) {
+          scheduleDraggedCards(world.x, world.y);
+        }
+        if (isDraggingText) {
+          moveDraggedTexts(world.x, world.y);
+        }
+        if (isDraggingGroupBox) {
+          moveDraggedGroupBoxes(world.x, world.y);
+        }
         return;
       }
 
@@ -2268,29 +2462,19 @@ const Diagrama: React.FC = () => {
         return;
       }
 
-      if (isDraggingCard) {
+      if (isDraggingCard || isDraggingText || isDraggingGroupBox) {
         flushDraggedCards();
         setIsDraggingCard(false);
+        setIsDraggingText(false);
+        setIsDraggingGroupBox(false);
         setDraggedCards(new Map());
+        setDraggedTexts(new Map());
+        setDraggedGroupBoxes(new Map());
         if (didDragCardsRef.current) {
           suppressCardClickRef.current = true;
           saveToHistory();
         }
         didDragCardsRef.current = false;
-        return;
-      }
-
-      if (isDraggingText) {
-        setIsDraggingText(false);
-        setDraggedTexts(new Map());
-        saveToHistory();
-        return;
-      }
-
-      if (isDraggingGroupBox) {
-        setIsDraggingGroupBox(false);
-        setDraggedGroupBoxes(new Map());
-        saveToHistory();
         return;
       }
 
@@ -2434,31 +2618,18 @@ const Diagrama: React.FC = () => {
       const world = screenToWorld(e.clientX, e.clientY);
       if (!world) return;
 
-      const activeIds =
-        selectedCards.has(id) && selectedCards.size > 0
-          ? Array.from(selectedCards)
-          : [id];
-
-      if (!selectedCards.has(id)) {
-        setSelectedCards(new Set([id]));
-      }
-      setSelectedConnections(new Set());
-      setSelectedTexts(new Set());
-      setSelectedGroupBoxes(new Set());
-
-      setIsDraggingCard(true);
-      setDragStart(world);
-      didDragCardsRef.current = false;
-
-      const nextDraggedCards = new Map<string, { startX: number; startY: number }>();
-      for (const activeId of activeIds) {
-        const card = cardMap.get(activeId);
-        if (!card) continue;
-        nextDraggedCards.set(activeId, { startX: card.x, startY: card.y });
-      }
-      setDraggedCards(nextDraggedCards);
+      beginExpandedSelectionDrag(
+        selectedCards.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
+          ? {
+              cards: selectedCards,
+              texts: selectedTexts,
+              groupBoxes: selectedGroupBoxes,
+            }
+          : { cards: new Set([id]) },
+        world
+      );
     },
-    [cardMap, screenToWorld, selectedCards]
+    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
   );
 
   const handleCardResizeStart = useCallback(
@@ -2496,25 +2667,18 @@ const Diagrama: React.FC = () => {
       const world = screenToWorld(e.clientX, e.clientY);
       if (!world) return;
 
-      const activeIds = selectedTexts.has(id) && selectedTexts.size > 0 ? Array.from(selectedTexts) : [id];
-      if (!selectedTexts.has(id)) {
-        setSelectedTexts(new Set([id]));
-      }
-      setSelectedCards(new Set());
-      setSelectedConnections(new Set());
-      setSelectedGroupBoxes(new Set());
-      setIsDraggingText(true);
-      setDragStart(world);
-
-      const nextDraggedTexts = new Map<string, { startX: number; startY: number }>();
-      for (const activeId of activeIds) {
-        const item = texts.find((text) => text.id === activeId);
-        if (!item) continue;
-        nextDraggedTexts.set(activeId, { startX: item.x, startY: item.y });
-      }
-      setDraggedTexts(nextDraggedTexts);
+      beginExpandedSelectionDrag(
+        selectedTexts.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
+          ? {
+              cards: selectedCards,
+              texts: selectedTexts,
+              groupBoxes: selectedGroupBoxes,
+            }
+          : { texts: new Set([id]) },
+        world
+      );
     },
-    [screenToWorld, selectedTexts, texts]
+    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
   );
 
   const handleTextResizeStart = useCallback(
@@ -2546,26 +2710,18 @@ const Diagrama: React.FC = () => {
       const world = screenToWorld(e.clientX, e.clientY);
       if (!world) return;
 
-      const activeIds =
-        selectedGroupBoxes.has(id) && selectedGroupBoxes.size > 0 ? Array.from(selectedGroupBoxes) : [id];
-      if (!selectedGroupBoxes.has(id)) {
-        setSelectedGroupBoxes(new Set([id]));
-      }
-      setSelectedCards(new Set());
-      setSelectedConnections(new Set());
-      setSelectedTexts(new Set());
-      setIsDraggingGroupBox(true);
-      setDragStart(world);
-
-      const nextDraggedGroups = new Map<string, { startX: number; startY: number }>();
-      for (const activeId of activeIds) {
-        const item = groupBoxes.find((groupBox) => groupBox.id === activeId);
-        if (!item) continue;
-        nextDraggedGroups.set(activeId, { startX: item.x, startY: item.y });
-      }
-      setDraggedGroupBoxes(nextDraggedGroups);
+      beginExpandedSelectionDrag(
+        selectedGroupBoxes.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
+          ? {
+              cards: selectedCards,
+              texts: selectedTexts,
+              groupBoxes: selectedGroupBoxes,
+            }
+          : { groupBoxes: new Set([id]) },
+        world
+      );
     },
-    [groupBoxes, screenToWorld, selectedGroupBoxes]
+    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
   );
 
   const handleGroupBoxResizeStart = useCallback(
@@ -2835,6 +2991,14 @@ const Diagrama: React.FC = () => {
           selectedGroupBoxes.size > 0
         }
         onDuplicate={duplicateSelection}
+        canGroup={selectedCards.size + selectedTexts.size + selectedGroupBoxes.size >= 2}
+        onGroup={groupSelectedElements}
+        canUngroup={
+          cards.some((card) => selectedCards.has(card.id) && Boolean(card.groupId)) ||
+          texts.some((item) => selectedTexts.has(item.id) && Boolean(item.groupId)) ||
+          groupBoxes.some((item) => selectedGroupBoxes.has(item.id) && Boolean(item.groupId))
+        }
+        onUngroup={ungroupSelectedElements}
         canDelete={
           selectedCards.size > 0 ||
           selectedConnections.size > 0 ||

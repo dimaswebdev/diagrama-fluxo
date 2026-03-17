@@ -60,11 +60,7 @@ export default function CanvasText({
         top: item.y,
         width: item.width,
         height: item.height,
-        boxShadow: isEditing
-          ? '0 14px 32px rgba(15,23,42,0.10)'
-          : isSelected
-          ? '0 10px 24px rgba(15,23,42,0.06)'
-          : 'none',
+        boxShadow: 'none',
         cursor: 'move',
         background: 'transparent',
       }}
