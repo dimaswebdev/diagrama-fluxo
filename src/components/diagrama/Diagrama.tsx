@@ -34,6 +34,7 @@ import {
 import {
   Card as CardType,
   Connection,
+  ConnectionStrokeWidth,
   ConnectionRouteStyle,
   DiagramState,
   DiagramText,
@@ -41,6 +42,7 @@ import {
   Point,
   SelectionBox as SelectionBoxType,
   ConnectionType,
+  ConnectionVariant,
   CardType as CardTypeEnum,
   GRID_SIZE,
   A4_WIDTH,
@@ -926,6 +928,30 @@ const Diagrama: React.FC = () => {
     [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
   );
 
+  const applyConnectionVariantFromPanel = useCallback(
+    (value: ConnectionVariant) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'connection') return;
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, variant: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
+  );
+
+  const applyConnectionStrokeWidthFromPanel = useCallback(
+    (value: ConnectionStrokeWidth) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'connection') return;
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, strokeWidth: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
+  );
+
   const openInlineEditor = useCallback((card: CardType) => {
     setSelectedCards(new Set([card.id]));
     setSelectedConnections(new Set());
@@ -1436,6 +1462,8 @@ const Diagrama: React.FC = () => {
         toCard: toId,
         type,
         routeStyle,
+        variant: 'default',
+        strokeWidth: 'medium',
         color,
         fromSide,
         toSide,
@@ -2555,6 +2583,8 @@ const Diagrama: React.FC = () => {
         onConnectionLabelChange={applyConnectionLabelFromPanel}
         onConnectionTypeChange={applyConnectionTypeFromPanel}
         onConnectionRouteStyleChange={applyConnectionRouteFromPanel}
+        onConnectionVariantChange={applyConnectionVariantFromPanel}
+        onConnectionStrokeWidthChange={applyConnectionStrokeWidthFromPanel}
         onLayerChange={applyLayerChangeFromPanel}
       />
 
@@ -2671,6 +2701,18 @@ const Diagrama: React.FC = () => {
                 markerUnits="strokeWidth"
               >
                 <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
+              </marker>
+              <marker
+                id="arrow-head-emphasis"
+                viewBox="0 0 14 14"
+                refX="12.5"
+                refY="7"
+                markerWidth="10"
+                markerHeight="10"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0 0 L14 7 L0 14 z" fill="context-stroke" />
               </marker>
             </defs>
 

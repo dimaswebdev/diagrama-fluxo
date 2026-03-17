@@ -59,6 +59,8 @@ export interface Connection {
   toCard: string;
   type?: 'normal' | 'dashed' | 'dotted';
   routeStyle?: ConnectionRouteStyle;
+  variant?: ConnectionVariant;
+  strokeWidth?: ConnectionStrokeWidth;
   color?: string;
   label?: string;
   fromSide: 'top' | 'right' | 'bottom' | 'left';
@@ -86,6 +88,8 @@ export interface SelectionBox {
 
 export type ConnectionType = 'normal' | 'dashed' | 'dotted';
 export type ConnectionRouteStyle = 'bezier' | 'orthogonal';
+export type ConnectionVariant = 'default' | 'emphasis';
+export type ConnectionStrokeWidth = 'thin' | 'medium' | 'thick';
 export type CardType = 'default' | 'input' | 'output' | 'process' | 'decision';
 
 export const GRID_SIZE = 20;

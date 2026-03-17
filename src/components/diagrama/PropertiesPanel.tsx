@@ -24,8 +24,10 @@ import {
 import type {
   Card,
   Connection,
+  ConnectionStrokeWidth,
   ConnectionRouteStyle,
   ConnectionType,
+  ConnectionVariant,
   DiagramText,
   GroupBox,
   TextStyle,
@@ -49,6 +51,8 @@ interface PropertiesPanelProps {
   onConnectionLabelChange: (value: string) => void;
   onConnectionTypeChange: (value: ConnectionType) => void;
   onConnectionRouteStyleChange: (value: ConnectionRouteStyle) => void;
+  onConnectionVariantChange: (value: ConnectionVariant) => void;
+  onConnectionStrokeWidthChange: (value: ConnectionStrokeWidth) => void;
   onLayerChange: (direction: 'front' | 'forward' | 'backward' | 'back') => void;
 }
 
@@ -289,6 +293,8 @@ export default function PropertiesPanel({
   onConnectionLabelChange,
   onConnectionTypeChange,
   onConnectionRouteStyleChange,
+  onConnectionVariantChange,
+  onConnectionStrokeWidthChange,
   onLayerChange,
 }: PropertiesPanelProps) {
   const style = useMemo(() => getStyle(selection), [selection]);
@@ -505,6 +511,29 @@ export default function PropertiesPanel({
     if (activeSection === 'line' && selection.kind === 'connection') {
       return (
         <div className="grid gap-3">
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Variante</span>
+            <select
+              value={selection.item.variant ?? 'default'}
+              onChange={(event) => onConnectionVariantChange(event.target.value as ConnectionVariant)}
+              className="h-11 w-full rounded-xl border border-cyan-100 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
+            >
+              <option value="default">Padrão</option>
+              <option value="emphasis">Destaque</option>
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Espessura</span>
+            <select
+              value={selection.item.strokeWidth ?? 'medium'}
+              onChange={(event) => onConnectionStrokeWidthChange(event.target.value as ConnectionStrokeWidth)}
+              className="h-11 w-full rounded-xl border border-cyan-100 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
+            >
+              <option value="thin">Fina</option>
+              <option value="medium">Média</option>
+              <option value="thick">Grossa</option>
+            </select>
+          </label>
           <label className="space-y-1">
             <span className="text-sm font-medium text-slate-700">Linha</span>
             <select

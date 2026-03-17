@@ -1,5 +1,13 @@
-import type { Card as CardType, Connection, DiagramText, GroupBox } from '@/types/diagrama';
+import type {
+  Card as CardType,
+  Connection,
+  ConnectionStrokeWidth,
+  ConnectionVariant,
+  DiagramText,
+  GroupBox,
+} from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
+import { buildOrthogonalEmphasisStrokeShape } from './connectionEmphasisShape';
 
 type Side = 'left' | 'right' | 'top' | 'bottom';
 
@@ -16,6 +24,24 @@ const SYSTEM_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
 const DEFAULT_GROUP_LAYER = -100;
 const DEFAULT_CARD_LAYER = 0;
 const DEFAULT_TEXT_LAYER = 100;
+
+function getConnectionStrokeWidth(strokeWidth?: ConnectionStrokeWidth, variant: ConnectionVariant = 'default') {
+  if (variant === 'emphasis') {
+    const emphasisMap: Record<ConnectionStrokeWidth, number> = {
+      thin: 5.5,
+      medium: 9.75,
+      thick: 15,
+    };
+    return emphasisMap[strokeWidth ?? 'medium'];
+  }
+
+  const widthMap: Record<ConnectionStrokeWidth, number> = {
+    thin: 1.5,
+    medium: 2,
+    thick: 3.25,
+  };
+  return widthMap[strokeWidth ?? 'medium'];
+}
 
 const esc = (s: string) =>
   s
@@ -297,6 +323,34 @@ function arrowHead(
   return `${end.x},${end.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`;
 }
 
+function arrowPolygon(
+  end: { x: number; y: number },
+  prev: { x: number; y: number },
+  length: number,
+  halfWidth: number
+) {
+  const dx = end.x - prev.x;
+  const dy = end.y - prev.y;
+  const magnitude = Math.hypot(dx, dy) || 1;
+  const ux = dx / magnitude;
+  const uy = dy / magnitude;
+  const px = -uy;
+  const py = ux;
+  const baseCenter = {
+    x: end.x - ux * length,
+    y: end.y - uy * length,
+  };
+  const p1 = {
+    x: baseCenter.x + px * halfWidth,
+    y: baseCenter.y + py * halfWidth,
+  };
+  const p2 = {
+    x: baseCenter.x - px * halfWidth,
+    y: baseCenter.y - py * halfWidth,
+  };
+  return `${end.x},${end.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`;
+}
+
 function wrapText(text: string, maxChars: number) {
   const words = (text || '').split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -382,12 +436,6 @@ export function buildExportSvg(params: {
               fill="${groupBox.background}"
               stroke="${groupBox.accent}"
               stroke-width="1.5"
-            />
-            <rect x="${groupBox.x + 18}" y="${groupBox.y + 16}" width="${groupBox.width - 36}" height="42"
-              rx="14" ry="14"
-              fill="rgba(255,255,255,0.58)"
-              stroke="rgba(255,255,255,0.72)"
-              stroke-width="1"
             />
             <text x="${titleX}" y="${groupBox.y + 42}"
               text-anchor="${anchor}"
@@ -585,6 +633,8 @@ export function buildExportSvg(params: {
       );
 
       const stroke = conn.color || '#2563eb';
+      const variant = conn.variant ?? 'default';
+      const strokeWidth = getConnectionStrokeWidth(conn.strokeWidth, variant);
       const dash =
         conn.type === 'dashed'
           ? '6 4'
@@ -592,7 +642,16 @@ export function buildExportSvg(params: {
           ? '2 5'
           : '';
 
-      const poly = arrowHead(geometry.endPoint, geometry.arrowReferencePoint, 10);
+      const poly =
+        variant === 'emphasis'
+          ? arrowPolygon(geometry.endPoint, geometry.arrowReferencePoint, Math.max(22, strokeWidth * 2.4), Math.max(10, strokeWidth * 0.95))
+          : arrowHead(geometry.endPoint, geometry.arrowReferencePoint, 10);
+      const emphasisStrokeShape =
+        variant === 'emphasis' &&
+        conn.routeStyle === 'orthogonal' &&
+        'points' in geometry
+          ? buildOrthogonalEmphasisStrokeShape(geometry.points, strokeWidth)
+          : null;
       const label = (conn.label || '').trim();
       const labelWidth = getLabelWidth(label);
       const labelCenterX = geometry.labelPoint.x;
@@ -602,15 +661,24 @@ export function buildExportSvg(params: {
 
       return `
         <g>
-          <path d="${geometry.path}"
+          ${
+            emphasisStrokeShape
+              ? `<path d="${emphasisStrokeShape.bodyPath}"
+                   fill="none"
+                   stroke="${stroke}"
+                   stroke-width="${strokeWidth}"
+                   stroke-linecap="butt"
+                   stroke-linejoin="round" />
+                 <polygon points="${emphasisStrokeShape.arrowPolygon}" fill="${stroke}" />`
+              : `<path d="${geometry.path}"
             fill="none"
             stroke="${stroke}"
-            stroke-width="2"
-            stroke-linecap="round"
+            stroke-width="${strokeWidth}"
+            stroke-linecap="${variant === 'emphasis' ? 'butt' : 'round'}"
             stroke-linejoin="round"
             ${dash ? `stroke-dasharray="${dash}"` : ''} />
-          <polygon points="${poly}"
-            fill="${stroke}" />
+          <polygon points="${poly}" fill="${stroke}" />`
+          }
           ${
             label
               ? `<g>

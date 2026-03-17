@@ -1,8 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { Card as CardType, Connection, ConnectionType } from '@/types/diagrama';
+import type {
+  Card as CardType,
+  Connection,
+  ConnectionStrokeWidth,
+  ConnectionType,
+  ConnectionVariant,
+} from '@/types/diagrama';
 import { getConnectionGeometry } from './connectionRouting';
+import { buildOrthogonalEmphasisStrokeShape } from './connectionEmphasisShape';
 
 const LABEL_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
 
@@ -27,6 +34,56 @@ function dashArray(type?: ConnectionType) {
   }
 }
 
+function getBaseStrokeWidth(strokeWidth?: ConnectionStrokeWidth, variant: ConnectionVariant = 'default') {
+  if (variant === 'emphasis') {
+    const emphasisMap: Record<ConnectionStrokeWidth, number> = {
+      thin: 5.5,
+      medium: 9.75,
+      thick: 15,
+    };
+    return emphasisMap[strokeWidth ?? 'medium'];
+  }
+
+  const widthMap: Record<ConnectionStrokeWidth, number> = {
+    thin: 1.5,
+    medium: 2,
+    thick: 3.25,
+  };
+  return widthMap[strokeWidth ?? 'medium'];
+}
+
+function getArrowMarkerId(variant: ConnectionVariant = 'default') {
+  return variant === 'emphasis' ? 'url(#arrow-head-emphasis)' : 'url(#arrow-head)';
+}
+
+function getArrowPolygonPoints(
+  end: { x: number; y: number },
+  prev: { x: number; y: number },
+  length: number,
+  halfWidth: number
+) {
+  const dx = end.x - prev.x;
+  const dy = end.y - prev.y;
+  const magnitude = Math.hypot(dx, dy) || 1;
+  const ux = dx / magnitude;
+  const uy = dy / magnitude;
+  const px = -uy;
+  const py = ux;
+  const baseCenter = {
+    x: end.x - ux * length,
+    y: end.y - uy * length,
+  };
+  const p1 = {
+    x: baseCenter.x + px * halfWidth,
+    y: baseCenter.y + py * halfWidth,
+  };
+  const p2 = {
+    x: baseCenter.x - px * halfWidth,
+    y: baseCenter.y - py * halfWidth,
+  };
+  return `${end.x},${end.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`;
+}
+
 function getLabelMetrics(label: string, zoom: number) {
   const width = Math.max(62 / zoom, (label.length * 7 + 22) / zoom);
   const height = 24 / zoom;
@@ -49,9 +106,25 @@ function ConnectionLine({
   }, connection.routeStyle ?? 'bezier');
 
   const isInteractive = isSelected || isHovered;
+  const variant = connection.variant ?? 'default';
   const strokeColor = connection.color || (isSelected ? '#0891b2' : '#94a3b8');
-  const strokeWidth = (isSelected ? 3.25 : isHovered ? 2.45 : 2) / zoom;
-  const hitWidth = 18 / zoom;
+  const baseStrokeWidth = getBaseStrokeWidth(connection.strokeWidth, variant);
+  const strokeWidth = (baseStrokeWidth + (isSelected ? 1.2 : isHovered ? 0.45 : 0)) / zoom;
+  const hitWidth = Math.max(18, baseStrokeWidth * (variant === 'emphasis' ? 4.5 : 5)) / zoom;
+  const arrowLength = (variant === 'emphasis' ? Math.max(22, baseStrokeWidth * 2.4) : 10) / zoom;
+  const arrowHalfWidth = (variant === 'emphasis' ? Math.max(10, baseStrokeWidth * 0.95) : 4.5) / zoom;
+  const arrowPolygon = getArrowPolygonPoints(
+    geometry.endPoint,
+    geometry.arrowReferencePoint,
+    arrowLength,
+    arrowHalfWidth
+  );
+  const emphasisStrokeShape =
+    variant === 'emphasis' &&
+    connection.routeStyle === 'orthogonal' &&
+    'points' in geometry
+      ? buildOrthogonalEmphasisStrokeShape(geometry.points, strokeWidth)
+      : null;
 
   return (
     <g
@@ -69,8 +142,9 @@ function ConnectionLine({
           fill="none"
           stroke={strokeColor}
           strokeOpacity={isSelected ? 0.18 : 0.1}
-          strokeWidth={(isSelected ? 8 : 6) / zoom}
+          strokeWidth={(Math.max(6, baseStrokeWidth * (variant === 'emphasis' ? 1.8 : 2.8)) + (isSelected ? 2 : 0)) / zoom}
           strokeLinecap="round"
+          strokeLinejoin="round"
           pointerEvents="none"
         />
       )}
@@ -84,16 +158,46 @@ function ConnectionLine({
         pointerEvents="stroke"
       />
 
-      <path
-        d={geometry.path}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={dashArray(connection.type)}
-        markerEnd="url(#arrow-head)"
-        pointerEvents="none"
-      />
+      {emphasisStrokeShape ? (
+        <>
+          <path
+            d={emphasisStrokeShape.bodyPath}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            strokeLinejoin="round"
+            pointerEvents="none"
+          />
+          <polygon
+            points={emphasisStrokeShape.arrowPolygon}
+            fill={strokeColor}
+            pointerEvents="none"
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d={geometry.path}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap={variant === 'emphasis' ? 'butt' : 'round'}
+            strokeLinejoin="round"
+            strokeDasharray={dashArray(connection.type)}
+            markerEnd={variant === 'emphasis' ? undefined : getArrowMarkerId(variant)}
+            pointerEvents="none"
+          />
+
+          {variant === 'emphasis' && (
+            <polygon
+              points={arrowPolygon}
+              fill={strokeColor}
+              pointerEvents="none"
+            />
+          )}
+        </>
+      )}
 
       {connection.label && (() => {
         const label = connection.label.trim();

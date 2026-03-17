@@ -3,7 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeftRight, Link2 } from 'lucide-react';
 
-import type { Connection, ConnectionRouteStyle, ConnectionType } from '@/types/diagrama';
+import type {
+  Connection,
+  ConnectionRouteStyle,
+  ConnectionStrokeWidth,
+  ConnectionType,
+  ConnectionVariant,
+} from '@/types/diagrama';
 
 type Props = {
   connection: Connection;
@@ -24,6 +30,17 @@ const routeStyles: { value: ConnectionRouteStyle; label: string }[] = [
   { value: 'orthogonal', label: 'Ortogonal' },
 ];
 
+const connectionVariants: { value: ConnectionVariant; label: string }[] = [
+  { value: 'default', label: 'Padrão' },
+  { value: 'emphasis', label: 'Destaque' },
+];
+
+const strokeWidths: { value: ConnectionStrokeWidth; label: string }[] = [
+  { value: 'thin', label: 'Fina' },
+  { value: 'medium', label: 'Média' },
+  { value: 'thick', label: 'Grossa' },
+];
+
 export default function ConnectionEditDialog({
   connection,
   open,
@@ -35,12 +52,16 @@ export default function ConnectionEditDialog({
   const [color, setColor] = useState(connection.color ?? '#2563eb');
   const [type, setType] = useState<ConnectionType>(connection.type ?? 'normal');
   const [routeStyle, setRouteStyle] = useState<ConnectionRouteStyle>(connection.routeStyle ?? 'bezier');
+  const [variant, setVariant] = useState<ConnectionVariant>(connection.variant ?? 'default');
+  const [strokeWidth, setStrokeWidth] = useState<ConnectionStrokeWidth>(connection.strokeWidth ?? 'medium');
 
   useEffect(() => {
     setLabel(connection.label ?? '');
     setColor(connection.color ?? '#2563eb');
     setType(connection.type ?? 'normal');
     setRouteStyle(connection.routeStyle ?? 'bezier');
+    setVariant(connection.variant ?? 'default');
+    setStrokeWidth(connection.strokeWidth ?? 'medium');
   }, [connection]);
 
   if (!open) return null;
@@ -100,6 +121,36 @@ export default function ConnectionEditDialog({
             </label>
 
             <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Variante</span>
+              <select
+                value={variant}
+                onChange={(e) => setVariant(e.target.value as ConnectionVariant)}
+                className="h-11 w-full rounded-xl border border-cyan-100 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
+              >
+                {connectionVariants.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Espessura</span>
+              <select
+                value={strokeWidth}
+                onChange={(e) => setStrokeWidth(e.target.value as ConnectionStrokeWidth)}
+                className="h-11 w-full rounded-xl border border-cyan-100 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
+              >
+                {strokeWidths.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
               <span className="text-sm font-medium text-slate-700">Estilo da rota</span>
               <select
                 value={routeStyle}
@@ -147,7 +198,7 @@ export default function ConnectionEditDialog({
           </button>
           <button
             className="ui-active-surface h-11 rounded-xl border border-cyan-200 px-4 text-sm font-medium text-cyan-900"
-            onClick={() => onSave({ label, color, type, routeStyle })}
+            onClick={() => onSave({ label, color, type, routeStyle, variant, strokeWidth })}
           >
             Salvar conexão
           </button>
