@@ -34,6 +34,7 @@ export interface DiagramText {
   width: number;
   height: number;
   layer?: number;
+  rotation?: -90 | 0 | 90;
   text: string;
   accent: string;
   background?: string;
@@ -48,6 +49,7 @@ export interface GroupBox {
   height: number;
   layer?: number;
   title: string;
+  showTitle?: boolean;
   accent: string;
   background: string;
   titleStyle: TextStyle;

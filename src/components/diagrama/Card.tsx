@@ -85,12 +85,14 @@ function Card({
   const isCompactCard = card.width < 250 || card.height < 170;
   const titleFontSize = card.textStyle?.fontSize ?? (isCompactCard ? 16 : 18);
   const contentFontSize = Math.max(12, Math.round((card.textStyle?.fontSize ?? 14) * 0.9));
-  const cardTextAlign = card.textStyle?.textAlign ?? 'left';
+  const contentTextAlign = card.textStyle?.textAlign ?? 'left';
   const cardTextColor = card.textStyle?.color ?? '#111827';
   const semanticTitleClass = isCompactCard ? 'text-base' : 'text-lg';
   const semanticBodyClass = isCompactCard ? 'text-[13px] leading-5' : 'text-sm leading-6';
   const basePaddingClass = isCompactCard ? 'p-3' : 'p-4';
   const defaultContentClass = isCompactCard ? 'text-[13px] leading-5' : 'text-sm';
+  const dateBadgeClass = isCompactCard ? 'text-[12px] px-3 py-1' : 'text-[13px] px-3.5 py-1.5';
+  const topMeta = [card.label, card.source].filter(Boolean).join(' • ');
 
   return (
     <div
@@ -139,11 +141,15 @@ function Card({
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {card.date}
-            </div>
             <div className={`${semanticTitleClass} font-semibold leading-tight text-slate-800`}>
               {card.title}
+            </div>
+            <div className="flex justify-center">
+              <span
+                className={`rounded-full border border-white/85 bg-white/78 font-semibold tracking-[0.08em] text-slate-600 ${dateBadgeClass}`}
+              >
+                {card.date}
+              </span>
             </div>
             <div className={`space-y-1 text-slate-700 ${semanticBodyClass}`}>
               {compactLines.length > 0 ? compactLines.map((line) => <div key={line}>{line}</div>) : <div>{card.content}</div>}
@@ -157,8 +163,23 @@ function Card({
           )}
         </div>
       ) : (
-        <div className={`flex h-full flex-col ${basePaddingClass}`}>
-          <div className="mb-3 flex items-center gap-3">
+        <div className={`relative flex h-full flex-col ${basePaddingClass}`}>
+          {topMeta && (
+            <div className="absolute right-4 top-4 z-[1] max-w-[42%]">
+              <span
+                className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                style={{
+                  border: `1px solid ${card.accent}`,
+                  backgroundColor: `${card.accent}18`,
+                  color: '#111827',
+                }}
+              >
+                {topMeta}
+              </span>
+            </div>
+          )}
+
+          <div className="mb-3 flex items-start gap-3">
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white"
               style={{ backgroundColor: card.accent }}
@@ -169,11 +190,10 @@ function Card({
             <div
               style={{
                 flex: 1,
-                textAlign: cardTextAlign,
+                textAlign: 'left',
               }}
             >
-              <div className="font-semibold leading-tight" style={{ fontSize: titleFontSize, color: cardTextColor, textAlign: cardTextAlign }}>{card.title}</div>
-              <div className="text-xs text-gray-500">{card.date}</div>
+              <div className="font-semibold leading-tight" style={{ fontSize: titleFontSize, color: cardTextColor, textAlign: 'left' }}>{card.title}</div>
             </div>
           </div>
 
@@ -183,7 +203,8 @@ function Card({
               color: cardTextColor,
               fontSize: contentFontSize,
               lineHeight: card.textStyle?.lineHeight ?? 1.45,
-              textAlign: cardTextAlign,
+              textAlign: contentTextAlign,
+              paddingBottom: 44,
             }}
           >
             {card.content}
@@ -202,23 +223,18 @@ function Card({
             </div>
           )}
 
-          {(card.label || card.source) && (
-            <div
-              className="mt-3 flex text-xs text-gray-500"
+          <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2">
+            <span
+              className={`inline-flex rounded-full font-semibold tracking-[0.06em] ${dateBadgeClass}`}
               style={{
-                justifyContent:
-                  cardTextAlign === 'center'
-                    ? 'center'
-                    : cardTextAlign === 'right'
-                    ? 'flex-end'
-                    : 'space-between',
-                gap: cardTextAlign === 'left' ? 12 : 8,
+                border: `1px solid ${card.accent}`,
+                backgroundColor: `${card.accent}18`,
+                color: '#111827',
               }}
             >
-              <span>{card.label}</span>
-              <span>{card.source}</span>
-            </div>
-          )}
+              {card.date}
+            </span>
+          </div>
         </div>
       )}
 

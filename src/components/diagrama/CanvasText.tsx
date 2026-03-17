@@ -39,6 +39,17 @@ export default function CanvasText({
   onCommit,
   onCancel,
 }: CanvasTextProps) {
+  const rotation = item.rotation ?? 0;
+  const isRotated = rotation !== 0;
+  const rotatedFrameStyle: React.CSSProperties = isRotated
+    ? {
+        position: 'absolute',
+        inset: 0,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: 'center',
+      }
+    : {};
+
   return (
     <div
       data-diagram-text
@@ -49,82 +60,91 @@ export default function CanvasText({
         top: item.y,
         width: item.width,
         height: item.height,
-        border: isSelected ? `1px dashed ${item.accent}` : '1px dashed transparent',
-        background: item.background ?? 'rgba(255,255,255,0.18)',
         boxShadow: isEditing
           ? '0 14px 32px rgba(15,23,42,0.10)'
           : isSelected
           ? '0 10px 24px rgba(15,23,42,0.06)'
           : 'none',
         cursor: 'move',
+        background: 'transparent',
       }}
       onMouseDown={onDragStart}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
-      {isSelected &&
-        handles.map((handle) => (
-          <button
-            key={handle.key}
-            type="button"
-            className="absolute h-3.5 w-3.5 rounded-[4px] border border-white bg-[#4FA9F6] shadow-[0_2px_8px_rgba(37,99,235,0.18)]"
-            style={{ ...handle.style, cursor: handle.cursor }}
-            onMouseDown={(event) => {
-              event.stopPropagation();
-              event.preventDefault();
-              onResizeStart(handle.key, event);
-            }}
-          />
-        ))}
-
-      {isEditing ? (
-        <textarea
-          autoFocus
-          value={draftValue}
-          onMouseDown={(event) => event.stopPropagation()}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onBlur={onCommit}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              onCancel();
-            }
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              onCommit();
-            }
-          }}
-          className="h-full w-full resize-none rounded-2xl border p-2.5 outline-none"
+      <div style={rotatedFrameStyle}>
+        <div
+          className="absolute inset-0 rounded-2xl"
           style={{
-            borderColor: item.accent,
-            background: 'rgba(255,255,255,0.72)',
-            color: item.textStyle.color ?? '#111827',
-            fontSize: item.textStyle.fontSize,
-            fontWeight: item.textStyle.fontWeight ?? 600,
-            lineHeight: item.textStyle.lineHeight ?? 1.35,
-            textAlign: item.textStyle.textAlign ?? 'left',
+            border: isSelected ? '1px dashed rgba(79,169,246,0.8)' : '1px dashed transparent',
+            background: item.background ?? 'rgba(255,255,255,0.18)',
           }}
         />
-      ) : (
-        <div
-          className="flex h-full w-full items-start rounded-2xl p-2.5 whitespace-pre-wrap"
-          style={{
-            color: item.textStyle.color ?? '#111827',
-            fontSize: item.textStyle.fontSize,
-            fontWeight: item.textStyle.fontWeight ?? 600,
-            lineHeight: item.textStyle.lineHeight ?? 1.35,
-            textAlign: item.textStyle.textAlign ?? 'left',
-            justifyContent:
-              item.textStyle.textAlign === 'center'
-                ? 'center'
-                : item.textStyle.textAlign === 'right'
-                ? 'flex-end'
-                : 'flex-start',
-          }}
-        >
-          {item.text}
-        </div>
-      )}
+
+        {isSelected &&
+          handles.map((handle) => (
+            <button
+              key={handle.key}
+              type="button"
+              className="absolute h-3.5 w-3.5 rounded-[4px] border border-white bg-[#4FA9F6] shadow-[0_2px_8px_rgba(37,99,235,0.18)]"
+              style={{ ...handle.style, cursor: handle.cursor }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                onResizeStart(handle.key, event);
+              }}
+            />
+          ))}
+
+        {isEditing ? (
+          <textarea
+            autoFocus
+            value={draftValue}
+            onMouseDown={(event) => event.stopPropagation()}
+            onChange={(event) => onDraftChange(event.target.value)}
+            onBlur={onCommit}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancel();
+              }
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                onCommit();
+              }
+            }}
+            className="h-full w-full resize-none rounded-2xl border p-2.5 outline-none"
+            style={{
+              borderColor: item.accent,
+              background: 'rgba(255,255,255,0.72)',
+              color: item.textStyle.color ?? '#111827',
+              fontSize: item.textStyle.fontSize,
+              fontWeight: item.textStyle.fontWeight ?? 600,
+              lineHeight: item.textStyle.lineHeight ?? 1.35,
+              textAlign: item.textStyle.textAlign ?? 'left',
+            }}
+          />
+        ) : (
+          <div
+            className="flex h-full w-full items-start rounded-2xl p-2.5 whitespace-pre-wrap"
+            style={{
+              color: item.textStyle.color ?? '#111827',
+              fontSize: item.textStyle.fontSize,
+              fontWeight: item.textStyle.fontWeight ?? 600,
+              lineHeight: item.textStyle.lineHeight ?? 1.35,
+              textAlign: item.textStyle.textAlign ?? 'left',
+              justifyContent:
+                item.textStyle.textAlign === 'center'
+                  ? 'center'
+                  : item.textStyle.textAlign === 'right'
+                  ? 'flex-end'
+                  : 'flex-start',
+            }}
+          >
+            {item.text}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

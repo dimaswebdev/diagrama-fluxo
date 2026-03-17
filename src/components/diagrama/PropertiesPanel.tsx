@@ -47,7 +47,9 @@ interface PropertiesPanelProps {
   onFontSizeChange: (value: number) => void;
   onFontWeightChange: (value: 400 | 500 | 600 | 700) => void;
   onTextAlignChange: (value: 'left' | 'center' | 'right') => void;
+  onTextRotationChange: (value: -90 | 0 | 90) => void;
   onBackgroundOpacityChange: (value: number) => void;
+  onGroupTitleVisibilityChange: (value: boolean) => void;
   onConnectionLabelChange: (value: string) => void;
   onConnectionTypeChange: (value: ConnectionType) => void;
   onConnectionRouteStyleChange: (value: ConnectionRouteStyle) => void;
@@ -289,7 +291,9 @@ export default function PropertiesPanel({
   onFontSizeChange,
   onFontWeightChange,
   onTextAlignChange,
+  onTextRotationChange,
   onBackgroundOpacityChange,
+  onGroupTitleVisibilityChange,
   onConnectionLabelChange,
   onConnectionTypeChange,
   onConnectionRouteStyleChange,
@@ -424,12 +428,14 @@ export default function PropertiesPanel({
       ? getBackgroundOpacityPercent(selection.item.background)
       : 0
     : 0;
+  const showGroupTitle = selection?.kind === 'group' ? selection.item.showTitle ?? true : true;
 
   const hasTypography = selection ? selection.kind !== 'connection' : false;
   const canAdjustBackground = selection ? selection.kind === 'text' || selection.kind === 'group' : false;
   const canAdjustLayer = selection ? selection.kind !== 'connection' : false;
   const currentAlign = style?.textAlign ?? 'left';
   const currentFontSize = style?.fontSize ?? 14;
+  const currentRotation = selection?.kind === 'text' ? selection.item.rotation ?? 0 : 0;
   const panelWidth = isCollapsed ? COLLAPSED_PANEL_WIDTH : EXPANDED_PANEL_WIDTH;
   const isRightSide = position.x + panelWidth / 2 > viewportSize.width / 2;
   const flyoutSide = isRightSide ? 'left' : 'right';
@@ -634,6 +640,23 @@ export default function PropertiesPanel({
               </AlignButton>
             </div>
           </div>
+
+          {selection.kind === 'text' && (
+            <div className="mt-3 space-y-1">
+              <span className="text-sm font-medium text-slate-700">Rotação</span>
+              <div className="grid grid-cols-3 gap-2">
+                <AlignButton active={currentRotation === 0} label="0 graus" onClick={() => onTextRotationChange(0)}>
+                  <span className="text-xs font-semibold">0°</span>
+                </AlignButton>
+                <AlignButton active={currentRotation === 90} label="90 graus" onClick={() => onTextRotationChange(90)}>
+                  <span className="text-xs font-semibold">90°</span>
+                </AlignButton>
+                <AlignButton active={currentRotation === -90} label="-90 graus" onClick={() => onTextRotationChange(-90)}>
+                  <span className="text-xs font-semibold">-90°</span>
+                </AlignButton>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -641,6 +664,28 @@ export default function PropertiesPanel({
     if (activeSection === 'appearance' && canAdjustBackground) {
       return (
         <div className="rounded-[24px] border border-slate-200/80 bg-white/72 p-4">
+          {selection.kind === 'group' && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium text-slate-700">Título nativo</div>
+                <div className="text-xs text-slate-500">Mostra ou oculta o título do agrupamento.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onGroupTitleVisibilityChange(!showGroupTitle)}
+                className={`relative h-7 w-12 rounded-full transition ${
+                  showGroupTitle ? 'bg-cyan-500/85' : 'bg-slate-300'
+                }`}
+                title={showGroupTitle ? 'Ocultar título' : 'Mostrar título'}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${
+                    showGroupTitle ? 'left-6' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
           <div className="mb-1.5 flex items-center justify-between text-sm font-medium text-slate-700">
             <span>Opacidade do fundo</span>
             <input

@@ -40,6 +40,7 @@ export default function GroupBox({
   onCancel,
 }: GroupBoxProps) {
   const title = item.title.trim();
+  const showTitle = item.showTitle ?? true;
 
   return (
     <div
@@ -105,7 +106,7 @@ export default function GroupBox({
               textAlign: item.titleStyle.textAlign ?? 'center',
             }}
           />
-        ) : (
+        ) : showTitle ? (
           <div
             className="px-3 py-2 uppercase tracking-[0.04em]"
             style={{
@@ -121,7 +122,7 @@ export default function GroupBox({
           >
             {title}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

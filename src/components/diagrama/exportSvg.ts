@@ -27,6 +27,7 @@ export type Bounds = { x: number; y: number; width: number; height: number };
 
 const SYSTEM_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
 const DEFAULT_GROUP_LAYER = -100;
+const DEFAULT_CONNECTION_LAYER = -50;
 const DEFAULT_CARD_LAYER = 0;
 const DEFAULT_TEXT_LAYER = 100;
 
@@ -379,7 +380,15 @@ function getLabelWidth(label: string) {
   return Math.max(68, label.length * 7.2 + 26);
 }
 
+function wrapTextToBox(text: string, maxChars: number, maxLines: number) {
+  if (maxLines <= 0) return [];
+  return wrapText(text, maxChars).slice(0, maxLines);
+}
+
 function buildGroupTitleMarkup(groupBox: GroupBox) {
+  if (groupBox.showTitle === false) {
+    return '';
+  }
   const title = (groupBox.title || '').trim();
   if (!title) {
     return '';
@@ -473,12 +482,6 @@ export function buildExportSvg(params: {
     })
   );
 
-  const groupSvg = groupBoxes
-    .map((groupBox) => {
-      return groupSvgMap.get(groupBox.id) ?? '';
-    })
-    .join('');
-
   // CARDS
   const cardSvgMap = new Map(
     cards.map((c) => {
@@ -486,31 +489,48 @@ export function buildExportSvg(params: {
       const stroke = c.accent || '#2563eb';
       const fillOpacity = 0.13;
 
-      const title = esc(c.title || '');
       const date = esc(c.date || '');
       const content = (c.content || '').trim();
 
-      const contentLines = wrapText(
-        content,
-        clamp(Math.floor((c.width - 28) / 6.2), 18, 44)
-      ).slice(0, 10);
-
       const tx = c.x + 18;
       const ty = c.y + 30;
-      const textAlign = c.textStyle?.textAlign ?? 'left';
-      const titleAnchor = textAlign === 'center' ? 'middle' : textAlign === 'right' ? 'end' : 'start';
-      const titleX =
-        textAlign === 'center'
-          ? c.x + c.width / 2
-          : textAlign === 'right'
-          ? c.x + c.width - 18
-          : tx + 26;
+      const contentAlign = c.textStyle?.textAlign ?? 'left';
+      const titleFontSize = c.textStyle?.fontSize ?? 14;
+      const titleLineHeight = titleFontSize * 1.08;
+      const titleLines = wrapText(
+        c.title || '',
+        clamp(Math.floor((c.width - 64) / (titleFontSize * 0.62)), 10, 30)
+      ).slice(0, 2);
+      const titleBlockHeight = titleLines.length * titleLineHeight;
+      const titleAnchor = 'start';
+      const titleX = tx + 26;
+      const topMeta = [c.label, c.source].filter(Boolean).join(' • ');
+      const topMetaWidth = Math.max(72, topMeta.length * 6.2 + 20);
+      const topMetaX = c.x + c.width - topMetaWidth - 16;
+      const topMetaY = c.y + 14;
+      const dateY = c.y + c.height - 36;
+      const dateBadgeHeight = 22;
+      const dateBadgeWidth = Math.max(86, (c.date?.length ?? 0) * 6.1 + 18);
+      const dateBadgeX = c.x + c.width / 2 - dateBadgeWidth / 2;
+      const dateTextY = dateY + 14.5;
       const contentX =
-        textAlign === 'center'
+        contentAlign === 'center'
           ? c.x + c.width / 2
-          : textAlign === 'right'
+          : contentAlign === 'right'
           ? c.x + c.width - 18
           : tx + 26;
+      const contentAnchor =
+        contentAlign === 'center' ? 'middle' : contentAlign === 'right' ? 'end' : 'start';
+      const contentLineHeight = Math.max(13, (Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)) * 1.18);
+      const contentTop = ty + Math.max(18, titleBlockHeight + 12);
+      const contentBottomPadding = dateBadgeHeight + 24;
+      const availableContentHeight = Math.max(0, c.height - (contentTop - c.y) - contentBottomPadding);
+      const maxContentLines = Math.max(1, Math.floor(availableContentHeight / contentLineHeight));
+      const contentLines = wrapTextToBox(
+        content,
+        clamp(Math.floor((c.width - 44) / (Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82) * 0.6)), 14, 44),
+        maxContentLines
+      );
 
       return [
         c.id,
@@ -535,20 +555,60 @@ export function buildExportSvg(params: {
               ${esc(String(c.sequence ?? ''))}
             </text>
 
-            <text x="${titleX}" y="${ty}"
+            ${titleLines
+              .map(
+                (line, index) => `<text x="${titleX}" y="${ty + index * titleLineHeight}"
               text-anchor="${titleAnchor}"
               font-family="${SYSTEM_FONT_STACK}"
-              font-size="${c.textStyle?.fontSize ?? 14}"
+              font-size="${titleFontSize}"
               font-weight="${c.textStyle?.fontWeight ?? 700}"
               fill="${c.textStyle?.color ?? '#111827'}">
-              ${title}
-            </text>
+              ${esc(line)}
+            </text>`
+              )
+              .join('')}
 
-            <text x="${titleX}" y="${ty + 16}"
-              text-anchor="${titleAnchor}"
+            ${
+              topMeta
+                ? `<rect
+              x="${topMetaX}"
+              y="${topMetaY}"
+              width="${topMetaWidth}"
+              height="22"
+              rx="11"
+              fill="${stroke}"
+              fill-opacity="0.09"
+              stroke="${stroke}"
+              stroke-width="1"
+            />
+            <text x="${topMetaX + topMetaWidth / 2}" y="${topMetaY + 14.5}"
+              text-anchor="middle"
               font-family="${SYSTEM_FONT_STACK}"
-              font-size="10.5"
-              fill="#6b7280">
+              font-size="10"
+              font-weight="600"
+              fill="#111827">
+              ${esc(topMeta)}
+            </text>`
+                : ''
+            }
+
+            <rect
+              x="${dateBadgeX}"
+              y="${dateY - 2}"
+              width="${dateBadgeWidth}"
+              height="${dateBadgeHeight}"
+              rx="11"
+              fill="${stroke}"
+              fill-opacity="0.09"
+              stroke="${stroke}"
+              stroke-width="1"
+            />
+            <text x="${dateBadgeX + dateBadgeWidth / 2}" y="${dateTextY}"
+              text-anchor="middle"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="12"
+              font-weight="600"
+              fill="#111827">
               ${date}
             </text>
 
@@ -558,9 +618,9 @@ export function buildExportSvg(params: {
                     .map(
                       (ln, i) =>
                       `<text x="${contentX}" y="${
-                          ty + 48 + i * 14
+                          contentTop + i * contentLineHeight
                         }"
-                          text-anchor="${titleAnchor}"
+                          text-anchor="${contentAnchor}"
                           font-family="${SYSTEM_FONT_STACK}"
                           font-size="${Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)}"
                           fill="${c.textStyle?.color ?? '#374151'}">
@@ -570,31 +630,11 @@ export function buildExportSvg(params: {
                     .join('')
                 : ''
             }
-
-            ${
-              c.label
-                ? `<text x="${textAlign === 'right' ? c.x + c.width - 18 : textAlign === 'center' ? c.x + c.width / 2 : c.x + 18}" y="${
-                    c.y + c.height - 14
-                  }"
-                  text-anchor="${titleAnchor}"
-                  font-family="${SYSTEM_FONT_STACK}"
-                  font-size="10.5"
-                  fill="#6b7280">
-                  ${esc(c.label)}
-                </text>`
-                : ''
-            }
           </g>
         `,
       ];
     })
   );
-
-  const cardSvg = cards
-    .map((c) => {
-      return cardSvgMap.get(c.id) ?? '';
-    })
-    .join('');
 
   const textSvgMap = new Map(
     texts.map((item) => {
@@ -608,10 +648,13 @@ export function buildExportSvg(params: {
           : textAlign === 'right'
           ? item.x + item.width - 12
           : item.x + 12;
+      const rotation = item.rotation ?? 0;
+      const centerX = item.x + item.width / 2;
+      const centerY = item.y + item.height / 2;
       return [
         item.id,
         `
-          <g>
+          <g transform="rotate(${rotation} ${centerX} ${centerY})">
             ${item.background ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="18" fill="${item.background}" />` : ''}
             ${lines
               .map(
@@ -631,18 +674,12 @@ export function buildExportSvg(params: {
     })
   );
 
-  const textSvg = texts
-    .map((item) => {
-      return textSvgMap.get(item.id) ?? '';
-    })
-    .join('');
-
   // CONEXÕES COM DIREÇÃO CORRETA
-  const connSvg = connections
-    .map((conn) => {
+  const connSvgMap = new Map(
+    connections.map((conn) => {
       const from = cards.find((x) => x.id === conn.fromCard);
       const to = cards.find((x) => x.id === conn.toCard);
-      if (!from || !to) return '';
+      if (!from || !to) return [conn.id, ''];
 
       const geometry = getConnectionGeometry(
         from,
@@ -695,9 +732,12 @@ export function buildExportSvg(params: {
       const labelCenterY = geometry.labelPoint.y;
       const labelX = labelCenterX - labelWidth / 2;
       const labelY = labelCenterY - 12;
+      const connectionLayer = DEFAULT_CONNECTION_LAYER;
 
-      return `
-        <g>
+      return [
+        conn.id,
+        `
+        <g data-layer="${connectionLayer}">
           ${
             emphasisStrokeShape
               ? `<path d="${emphasisStrokeShape.bodyPath}"
@@ -744,15 +784,21 @@ export function buildExportSvg(params: {
               : ''
           }
         </g>
-      `;
+      `,
+      ];
     })
-    .join('');
+  );
 
   const layeredElements = [
     ...groupBoxes.map((item) => ({
       layer: item.layer ?? DEFAULT_GROUP_LAYER,
       id: `group-${item.id}`,
       markup: groupSvgMap.get(item.id) ?? '',
+    })),
+    ...connections.map((item) => ({
+      layer: DEFAULT_CONNECTION_LAYER,
+      id: `connection-${item.id}`,
+      markup: connSvgMap.get(item.id) ?? '',
     })),
     ...cards.map((item) => ({
       layer: item.layer ?? DEFAULT_CARD_LAYER,
@@ -765,6 +811,7 @@ export function buildExportSvg(params: {
       markup: textSvgMap.get(item.id) ?? '',
     })),
   ]
+    .filter((item): item is { layer: number; id: string; markup: string } => typeof item.markup === 'string')
     .sort((a, b) => a.layer - b.layer || a.id.localeCompare(b.id))
     .map((item) => item.markup)
     .join('');
@@ -780,7 +827,6 @@ export function buildExportSvg(params: {
           fill="${opts.background}" />
     ${grid}
     <g>
-      ${connSvg}
       ${layeredElements}
     </g>
   </svg>

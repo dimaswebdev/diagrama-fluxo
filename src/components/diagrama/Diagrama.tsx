@@ -114,6 +114,7 @@ const DEFAULT_GROUP_TITLE_STYLE = {
   color: '#111827',
 };
 const DEFAULT_GROUP_LAYER = -100;
+const DEFAULT_CONNECTION_LAYER = -50;
 const DEFAULT_CARD_LAYER = 0;
 const DEFAULT_TEXT_LAYER = 100;
 const LAYER_STEP = 10;
@@ -678,6 +679,7 @@ const Diagrama: React.FC = () => {
     (direction: 'front' | 'forward' | 'backward' | 'back') => {
       if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
       const allLayers = [
+        DEFAULT_CONNECTION_LAYER,
         ...cards.map((card) => getCardLayer(card)),
         ...texts.map((item) => getTextLayer(item)),
         ...groupBoxes.map((item) => getGroupLayer(item)),
@@ -746,6 +748,22 @@ const Diagrama: React.FC = () => {
       })),
     ].sort((a, b) => a.layer - b.layer || a.id.localeCompare(b.id));
   }, [cards, groupBoxes, texts]);
+
+  const backgroundCanvasElements = useMemo(
+    () =>
+      canvasElements.filter(
+        (element) => element.kind === 'group' && element.layer < DEFAULT_CONNECTION_LAYER
+      ),
+    [canvasElements]
+  );
+
+  const foregroundCanvasElements = useMemo(
+    () =>
+      canvasElements.filter(
+        (element) => element.kind !== 'group' || element.layer >= DEFAULT_CONNECTION_LAYER
+      ),
+    [canvasElements]
+  );
 
   const applyAccentFromPanel = useCallback(
     (value: string) => {
@@ -826,6 +844,19 @@ const Diagrama: React.FC = () => {
     [cards, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setGroupBoxes, setTexts, texts]
   );
 
+  const applyTextRotationFromPanel = useCallback(
+    (rotation: -90 | 0 | 90) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'text') return;
+
+      const nextTexts = texts.map((item) =>
+        item.id === propertiesSelection.item.id ? { ...item, rotation } : item
+      );
+      setTexts(nextTexts);
+      saveToHistory(getDiagramState({ texts: nextTexts }));
+    },
+    [getDiagramState, propertiesSelection, saveToHistory, setTexts, texts]
+  );
+
   const applyFontWeightFromPanel = useCallback(
     (value: 400 | 500 | 600 | 700) => {
       if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
@@ -890,6 +921,19 @@ const Diagrama: React.FC = () => {
       }
     },
     [getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setGroupBoxes, setTexts, texts]
+  );
+
+  const applyGroupTitleVisibilityFromPanel = useCallback(
+    (showTitle: boolean) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'group') return;
+
+      const nextGroupBoxes = groupBoxes.map((item) =>
+        item.id === propertiesSelection.item.id ? { ...item, showTitle } : item
+      );
+      setGroupBoxes(nextGroupBoxes);
+      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+    },
+    [getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setGroupBoxes]
   );
 
   const applyConnectionLabelFromPanel = useCallback(
@@ -1382,6 +1426,7 @@ const Diagrama: React.FC = () => {
       text: 'Título ou observação',
       accent: '#111827',
       background: 'transparent',
+      rotation: 0,
       textStyle: DEFAULT_TEXT_STYLE,
     };
 
@@ -1411,6 +1456,7 @@ const Diagrama: React.FC = () => {
       height: 320,
       layer: DEFAULT_GROUP_LAYER,
       title: 'Classe de eventos',
+      showTitle: true,
       accent,
       background: 'rgba(148,163,184,0.12)',
       titleStyle: DEFAULT_GROUP_TITLE_STYLE,
@@ -2579,7 +2625,9 @@ const Diagrama: React.FC = () => {
         onFontSizeChange={applyTypographySize}
         onFontWeightChange={applyFontWeightFromPanel}
         onTextAlignChange={applyTypographyAlign}
+        onTextRotationChange={applyTextRotationFromPanel}
         onBackgroundOpacityChange={applyBackgroundOpacityFromPanel}
+        onGroupTitleVisibilityChange={applyGroupTitleVisibilityFromPanel}
         onConnectionLabelChange={applyConnectionLabelFromPanel}
         onConnectionTypeChange={applyConnectionTypeFromPanel}
         onConnectionRouteStyleChange={applyConnectionRouteFromPanel}
@@ -2680,13 +2728,45 @@ const Diagrama: React.FC = () => {
             willChange: 'transform',
           }}
         >
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {backgroundCanvasElements.map((element) => {
+              if (element.kind !== 'group') return null;
+              const item = element.item;
+              return (
+                <GroupBox
+                  key={`group-${item.id}`}
+                  item={item}
+                  isSelected={selectedGroupBoxes.has(item.id)}
+                  isEditing={editingGroupBoxId === item.id}
+                  draftValue={editingGroupBoxId === item.id ? editingGroupDraft : item.title}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedGroupBoxes(new Set([item.id]));
+                    setSelectedCards(new Set());
+                    setSelectedConnections(new Set());
+                    setSelectedTexts(new Set());
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    openGroupEditor(item);
+                  }}
+                  onDragStart={(event) => handleGroupBoxDragStart(item.id, event)}
+                  onResizeStart={(direction, event) => handleGroupBoxResizeStart(item.id, direction, event)}
+                  onDraftChange={setEditingGroupDraft}
+                  onCommit={applyGroupEditor}
+                  onCancel={cancelGroupEditor}
+                />
+              );
+            })}
+          </div>
+
           {/* SVG GLOBAL DE CONEXÃ•ES */}
           <svg
             className="absolute inset-0"
             style={{
               overflow: 'visible',
               pointerEvents: 'none',
-              zIndex: 5,
+              zIndex: 10,
             }}
           >
             <defs>
@@ -2815,7 +2895,7 @@ const Diagrama: React.FC = () => {
           </svg>
 
           <div style={{ position: 'relative', zIndex: 20 }}>
-            {canvasElements.map((element) => {
+            {foregroundCanvasElements.map((element) => {
               if (element.kind === 'group') {
                 const item = element.item;
                 return (
