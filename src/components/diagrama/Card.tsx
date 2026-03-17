@@ -92,7 +92,6 @@ function Card({
   const basePaddingClass = isCompactCard ? 'p-3' : 'p-4';
   const defaultContentClass = isCompactCard ? 'text-[13px] leading-5' : 'text-sm';
   const dateBadgeClass = isCompactCard ? 'text-[12px] px-3 py-1' : 'text-[13px] px-3.5 py-1.5';
-  const topMeta = [card.label, card.source].filter(Boolean).join(' • ');
 
   return (
     <div
@@ -164,21 +163,6 @@ function Card({
         </div>
       ) : (
         <div className={`relative flex h-full flex-col ${basePaddingClass}`}>
-          {topMeta && (
-            <div className="absolute right-4 top-4 z-[1] max-w-[42%]">
-              <span
-                className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                style={{
-                  border: `1px solid ${card.accent}`,
-                  backgroundColor: `${card.accent}18`,
-                  color: '#111827',
-                }}
-              >
-                {topMeta}
-              </span>
-            </div>
-          )}
-
           <div className="mb-3 flex items-start gap-3">
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -204,7 +188,7 @@ function Card({
               fontSize: contentFontSize,
               lineHeight: card.textStyle?.lineHeight ?? 1.45,
               textAlign: contentTextAlign,
-              paddingBottom: 44,
+              paddingBottom: 58,
             }}
           >
             {card.content}
@@ -235,6 +219,13 @@ function Card({
               {card.date}
             </span>
           </div>
+
+          {(card.label || card.source) && (
+            <div className="pointer-events-none absolute inset-x-4 bottom-2 flex items-center justify-between gap-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">
+              <span>{card.label || ''}</span>
+              <span>{card.source || ''}</span>
+            </div>
+          )}
         </div>
       )}
 

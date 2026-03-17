@@ -1128,7 +1128,7 @@ const Diagrama: React.FC = () => {
             title: inlineDraft.title.trim() || card.title,
             date: inlineDraft.date.trim() || card.date,
             content: inlineDraft.content.trim() || card.content,
-            label: inlineDraft.label.trim() || card.label,
+            label: inlineDraft.label.trim(),
           }
         : card
     );

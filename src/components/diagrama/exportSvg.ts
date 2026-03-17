@@ -504,10 +504,6 @@ export function buildExportSvg(params: {
       const titleBlockHeight = titleLines.length * titleLineHeight;
       const titleAnchor = 'start';
       const titleX = tx + 26;
-      const topMeta = [c.label, c.source].filter(Boolean).join(' • ');
-      const topMetaWidth = Math.max(72, topMeta.length * 6.2 + 20);
-      const topMetaX = c.x + c.width - topMetaWidth - 16;
-      const topMetaY = c.y + 14;
       const dateY = c.y + c.height - 36;
       const dateBadgeHeight = 22;
       const dateBadgeWidth = Math.max(86, (c.date?.length ?? 0) * 6.1 + 18);
@@ -523,7 +519,7 @@ export function buildExportSvg(params: {
         contentAlign === 'center' ? 'middle' : contentAlign === 'right' ? 'end' : 'start';
       const contentLineHeight = Math.max(13, (Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)) * 1.18);
       const contentTop = ty + Math.max(18, titleBlockHeight + 12);
-      const contentBottomPadding = dateBadgeHeight + 24;
+      const contentBottomPadding = dateBadgeHeight + 38;
       const availableContentHeight = Math.max(0, c.height - (contentTop - c.y) - contentBottomPadding);
       const maxContentLines = Math.max(1, Math.floor(availableContentHeight / contentLineHeight));
       const contentLines = wrapTextToBox(
@@ -568,30 +564,6 @@ export function buildExportSvg(params: {
               )
               .join('')}
 
-            ${
-              topMeta
-                ? `<rect
-              x="${topMetaX}"
-              y="${topMetaY}"
-              width="${topMetaWidth}"
-              height="22"
-              rx="11"
-              fill="${stroke}"
-              fill-opacity="0.09"
-              stroke="${stroke}"
-              stroke-width="1"
-            />
-            <text x="${topMetaX + topMetaWidth / 2}" y="${topMetaY + 14.5}"
-              text-anchor="middle"
-              font-family="${SYSTEM_FONT_STACK}"
-              font-size="10"
-              font-weight="600"
-              fill="#111827">
-              ${esc(topMeta)}
-            </text>`
-                : ''
-            }
-
             <rect
               x="${dateBadgeX}"
               y="${dateY - 2}"
@@ -611,6 +583,31 @@ export function buildExportSvg(params: {
               fill="#111827">
               ${date}
             </text>
+
+            ${
+              c.label
+                ? `<text x="${c.x + 18}" y="${c.y + c.height - 10}"
+                  text-anchor="start"
+                  font-family="${SYSTEM_FONT_STACK}"
+                  font-size="10.5"
+                  font-weight="500"
+                  fill="#64748b">
+                  ${esc(c.label)}
+                </text>`
+                : ''
+            }
+            ${
+              c.source
+                ? `<text x="${c.x + c.width - 18}" y="${c.y + c.height - 10}"
+                  text-anchor="end"
+                  font-family="${SYSTEM_FONT_STACK}"
+                  font-size="10.5"
+                  font-weight="500"
+                  fill="#64748b">
+                  ${esc(c.source)}
+                </text>`
+                : ''
+            }
 
             ${
               contentLines.length
