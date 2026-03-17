@@ -268,10 +268,18 @@ export function buildOrthogonalEmphasisStrokeShape(points: Point[], thickness: n
     return null;
   }
 
+  const startPoint = points[0];
+  const startNextPoint = points[1];
+  const startVector = normalizeVector(startPoint, startNextPoint);
+  const startInset = Math.max(2, thickness * 0.18);
+  const adjustedStart = {
+    x: startPoint.x - startVector.unitX * startInset,
+    y: startPoint.y - startVector.unitY * startInset,
+  };
   const endPoint = points[points.length - 1];
   const previousPoint = points[points.length - 2];
   const arrow = buildEmphasisArrowHead(endPoint, previousPoint, thickness);
-  const bodyPoints = [...points.slice(0, -1), arrow.baseCenter];
+  const bodyPoints = [adjustedStart, ...points.slice(1, -1), arrow.baseCenter];
 
   return {
     bodyPath: getRoundedOrthogonalPath(bodyPoints),

@@ -39,6 +39,8 @@ export default function GroupBox({
   onCommit,
   onCancel,
 }: GroupBoxProps) {
+  const title = item.title.trim();
+
   return (
     <div
       data-group-box
@@ -77,7 +79,7 @@ export default function GroupBox({
           ))}
         </>
       )}
-      <div className="absolute inset-x-5 top-4">
+      <div className="absolute inset-x-4 top-4">
         {isEditing ? (
           <input
             autoFocus
@@ -112,9 +114,12 @@ export default function GroupBox({
               fontWeight: item.titleStyle.fontWeight ?? 700,
               textAlign: item.titleStyle.textAlign ?? 'center',
               lineHeight: item.titleStyle.lineHeight ?? 1.15,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
             }}
           >
-            {item.title}
+            {title}
           </div>
         )}
       </div>

@@ -379,6 +379,39 @@ function getLabelWidth(label: string) {
   return Math.max(68, label.length * 7.2 + 26);
 }
 
+function buildGroupTitleMarkup(groupBox: GroupBox) {
+  const title = (groupBox.title || '').trim();
+  if (!title) {
+    return '';
+  }
+
+  const align = groupBox.titleStyle.textAlign ?? 'center';
+  const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
+  const titleX =
+    align === 'left'
+      ? groupBox.x + 28
+      : align === 'right'
+      ? groupBox.x + groupBox.width - 28
+      : groupBox.x + groupBox.width / 2;
+  const maxChars = clamp(Math.floor((groupBox.width - 56) / 11), 14, 36);
+  const lines = wrapText(title, maxChars).slice(0, 3);
+  const fontSize = groupBox.titleStyle.fontSize;
+  const lineHeight = fontSize * (groupBox.titleStyle.lineHeight ?? 1.15);
+  const blockHeight = lines.length * lineHeight;
+  const startY = groupBox.y + 24 + fontSize + Math.max(0, (34 - blockHeight) / 2);
+
+  return lines
+    .map(
+      (line, index) => `<text x="${titleX}" y="${startY + index * lineHeight}"
+              text-anchor="${anchor}"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="${fontSize}"
+              font-weight="${groupBox.titleStyle.fontWeight ?? 700}"
+              fill="${groupBox.titleStyle.color ?? '#111827'}">${esc(line)}</text>`
+    )
+    .join('');
+}
+
 export function buildExportSvg(params: {
   cards: CardType[];
   connections: Connection[];
@@ -423,15 +456,6 @@ export function buildExportSvg(params: {
 
   const groupSvgMap = new Map(
     groupBoxes.map((groupBox) => {
-      const title = esc(groupBox.title);
-      const align = groupBox.titleStyle.textAlign ?? 'center';
-      const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
-      const titleX =
-        align === 'left'
-          ? groupBox.x + 30
-          : align === 'right'
-          ? groupBox.x + groupBox.width - 30
-          : groupBox.x + groupBox.width / 2;
       return [
         groupBox.id,
         `
@@ -442,14 +466,7 @@ export function buildExportSvg(params: {
               stroke="${groupBox.accent}"
               stroke-width="1.5"
             />
-            <text x="${titleX}" y="${groupBox.y + 42}"
-              text-anchor="${anchor}"
-              font-family="${SYSTEM_FONT_STACK}"
-              font-size="${groupBox.titleStyle.fontSize}"
-              font-weight="${groupBox.titleStyle.fontWeight ?? 700}"
-              fill="${groupBox.titleStyle.color ?? '#111827'}">
-              ${title}
-            </text>
+            ${buildGroupTitleMarkup(groupBox)}
           </g>
         `,
       ];
