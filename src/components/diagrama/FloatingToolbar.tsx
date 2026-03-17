@@ -2,11 +2,10 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleDot,
-  AlignCenter,
-  AlignLeft,
   Grid3X3,
   HelpCircle,
   LogIn,
@@ -15,6 +14,7 @@ import {
   Minus,
   Move,
   Palette,
+  Pipette,
   Plus,
   Route,
   Settings2,
@@ -31,11 +31,6 @@ interface FloatingToolbarProps {
   onAddCard: (type?: CardType) => void;
   onAddText: () => void;
   onAddGroupBox: () => void;
-  canAdjustTypography: boolean;
-  typographySize: number;
-  typographyAlign: 'left' | 'center';
-  onTypographySizeChange: (size: number) => void;
-  onTypographyAlignChange: (align: 'left' | 'center') => void;
   connectionType: ConnectionType;
   onConnectionTypeChange: (type: ConnectionType) => void;
   connectionRouteStyle: ConnectionRouteStyle;
@@ -114,16 +109,35 @@ const connectionRouteStyles: { type: ConnectionRouteStyle; label: string; Icon: 
 ];
 
 const defaultModules: ModuleId[] = ['cards', 'colors', 'connections', 'view', 'zoom'];
+const TOOLBAR_DOCK_PADDING = 16;
+const TOOLBAR_TOP_SAFE_AREA = 96;
+const DEFAULT_TOOLBAR_HEIGHT = 420;
+const COLLAPSED_TOOLBAR_WIDTH = 68;
+const EXPANDED_TOOLBAR_WIDTH = 248;
+const normalizeHex = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '#000000';
+  return trimmed.startsWith('#') ? trimmed.slice(0, 7) : `#${trimmed}`.slice(0, 7);
+};
+
+const getDefaultToolbarPosition = () => ({
+  x: TOOLBAR_DOCK_PADDING,
+  y: Math.max(TOOLBAR_TOP_SAFE_AREA, Math.round((window.innerHeight - DEFAULT_TOOLBAR_HEIGHT) / 2)),
+});
+
+const getClampedToolbarPosition = (x: number, y: number, width: number, height: number) => {
+  const maxX = Math.max(TOOLBAR_DOCK_PADDING, window.innerWidth - width - TOOLBAR_DOCK_PADDING);
+  const maxY = Math.max(TOOLBAR_TOP_SAFE_AREA, window.innerHeight - height - TOOLBAR_DOCK_PADDING);
+  return {
+    x: Math.min(Math.max(TOOLBAR_DOCK_PADDING, x), maxX),
+    y: Math.min(Math.max(TOOLBAR_TOP_SAFE_AREA, y), maxY),
+  };
+};
 
 export default function FloatingToolbar({
   onAddCard,
   onAddText,
   onAddGroupBox,
-  canAdjustTypography,
-  typographySize,
-  typographyAlign,
-  onTypographySizeChange,
-  onTypographyAlignChange,
   connectionType,
   onConnectionTypeChange,
   connectionRouteStyle,
@@ -149,6 +163,7 @@ export default function FloatingToolbar({
   const [activePanel, setActivePanel] = useState<ModuleId | null>(null);
   const [pinnedPanel, setPinnedPanel] = useState<ModuleId | null>(null);
   const [isModulesMenuPinned, setIsModulesMenuPinned] = useState(false);
+  const [colorInput, setColorInput] = useState(cardColor);
   const [viewportSize, setViewportSize] = useState({ width: 1280, height: 720 });
   const menuRef = useRef<HTMLDivElement>(null);
   const toolbarColumnRef = useRef<HTMLDivElement>(null);
@@ -161,15 +176,22 @@ export default function FloatingToolbar({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        setPosition(getDefaultToolbarPosition());
+        return;
+      }
       const parsed = JSON.parse(raw) as {
         x?: number;
         y?: number;
         collapsed?: boolean;
         modules?: ModuleId[];
       };
+      const collapsed = parsed.collapsed ?? true;
+      const width = collapsed ? COLLAPSED_TOOLBAR_WIDTH : EXPANDED_TOOLBAR_WIDTH;
       if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-        setPosition({ x: parsed.x, y: parsed.y });
+        setPosition(getClampedToolbarPosition(parsed.x, parsed.y, width, DEFAULT_TOOLBAR_HEIGHT));
+      } else {
+        setPosition(getDefaultToolbarPosition());
       }
       if (typeof parsed.collapsed === 'boolean') {
         setIsCollapsed(parsed.collapsed);
@@ -215,6 +237,10 @@ export default function FloatingToolbar({
   }, [activePanel, showModulesMenu]);
 
   useEffect(() => {
+    setColorInput(cardColor);
+  }, [cardColor]);
+
+  useEffect(() => {
     const syncViewport = () => {
       setViewportSize({ width: window.innerWidth, height: window.innerHeight });
     };
@@ -237,16 +263,19 @@ export default function FloatingToolbar({
 
       const nextX = dragStateRef.current.originX + deltaX;
       const nextY = dragStateRef.current.originY + deltaY;
-      const maxX = Math.max(12, window.innerWidth - 320);
-      const maxY = Math.max(96, window.innerHeight - 320);
+      const toolbarWidth = menuRef.current?.offsetWidth ?? 72;
+      const toolbarHeight = menuRef.current?.offsetHeight ?? 360;
+      const maxX = Math.max(TOOLBAR_DOCK_PADDING, window.innerWidth - toolbarWidth - TOOLBAR_DOCK_PADDING);
+      const maxY = Math.max(TOOLBAR_TOP_SAFE_AREA, window.innerHeight - toolbarHeight - TOOLBAR_DOCK_PADDING);
 
       setPosition({
-        x: Math.min(Math.max(12, nextX), maxX),
-        y: Math.min(Math.max(96, nextY), maxY),
+        x: Math.min(Math.max(TOOLBAR_DOCK_PADDING, nextX), maxX),
+        y: Math.min(Math.max(TOOLBAR_TOP_SAFE_AREA, nextY), maxY),
       });
     };
 
     const handlePointerUp = () => {
+      document.body.style.userSelect = '';
       if (didDragRef.current) {
         suppressClickRef.current = true;
         window.setTimeout(() => {
@@ -269,6 +298,8 @@ export default function FloatingToolbar({
     () => defaultModules.filter((moduleId) => visibleModules.includes(moduleId)),
     [visibleModules]
   );
+  const toolbarWidth = isCollapsed ? COLLAPSED_TOOLBAR_WIDTH : EXPANDED_TOOLBAR_WIDTH;
+  const isRightSide = position.x + toolbarWidth / 2 > viewportSize.width / 2;
   const panelSide = position.x > viewportSize.width - 330 ? 'left' : 'right';
   const getButtonOffsetTop = (element: HTMLElement | null) => {
     const containerRect = menuRef.current?.getBoundingClientRect();
@@ -289,6 +320,10 @@ export default function FloatingToolbar({
   const modulesMenuTop = getPanelTopClass(getButtonOffsetTop(modulesButtonRef.current), 240);
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, select, textarea, label')) return;
+    event.preventDefault();
+    document.body.style.userSelect = 'none';
     dragStateRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -303,6 +338,22 @@ export default function FloatingToolbar({
       if (suppressClickRef.current) return;
       action();
     };
+  };
+
+  const canUseEyeDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
+
+  const openEyeDropper = async () => {
+    if (!canUseEyeDropper) return;
+    const EyeDropperCtor = (window as Window & { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper;
+    if (!EyeDropperCtor) return;
+    try {
+      const eyeDropper = new EyeDropperCtor();
+      const result = await eyeDropper.open();
+      setColorInput(result.sRGBHex);
+      onCardColorChange(result.sRGBHex);
+    } catch {
+      // ignore cancelled pick
+    }
   };
 
   const toggleModuleVisibility = (moduleId: ModuleId) => {
@@ -364,66 +415,86 @@ export default function FloatingToolbar({
               +
             </span>
           </button>
-          {canAdjustTypography && (
-            <div className="mt-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Tipografia
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={runAction(() => onTypographySizeChange(Math.max(10, typographySize - 2)))}
-                  className="ui-hover-surface rounded-xl px-2.5 py-2 text-sm font-semibold"
-                >
-                  A-
-                </button>
-                <div className="min-w-[46px] rounded-xl border border-slate-200/80 bg-white/80 px-2 py-2 text-center text-sm font-semibold text-slate-700">
-                  {typographySize}px
-                </div>
-                <button
-                  onClick={runAction(() => onTypographySizeChange(Math.min(48, typographySize + 2)))}
-                  className="ui-hover-surface rounded-xl px-2.5 py-2 text-sm font-semibold"
-                >
-                  A+
-                </button>
-                <button
-                  onClick={runAction(() => onTypographyAlignChange('left'))}
-                  className={`rounded-xl px-2.5 py-2 transition ${
-                    typographyAlign === 'left' ? 'ui-active-surface' : 'ui-hover-surface'
-                  }`}
-                >
-                  <AlignLeft className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={runAction(() => onTypographyAlignChange('center'))}
-                  className={`rounded-xl px-2.5 py-2 transition ${
-                    typographyAlign === 'center' ? 'ui-active-surface' : 'ui-hover-surface'
-                  }`}
-                >
-                  <AlignCenter className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="mt-2 rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs text-slate-500">
+            Tipografia e alinhamento agora ficam no painel de propriedades.
+          </div>
         </div>
       );
     }
 
     if (activePanel === 'colors') {
       return (
-        <div className="mx-auto grid w-fit grid-cols-4 gap-x-1 gap-y-1.5">
-          {cardColors.map((color) => (
-            <button
-              key={color}
-              onClick={runAction(() => onCardColorChange(color))}
-              className={`h-7 w-7 rounded-full border transition ${
-                cardColor === color
-                  ? 'scale-105 border-slate-200 shadow-[0_0_0_1px_rgba(226,232,240,0.95),0_6px_14px_rgba(15,23,42,0.08)]'
-                  : 'border-white/90 hover:scale-105 hover:border-slate-100 hover:shadow-[0_4px_10px_rgba(15,23,42,0.06)]'
-              }`}
-              style={{ backgroundColor: color }}
-              title={color}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div
+              className="h-10 w-10 rounded-2xl border border-white shadow-[0_6px_16px_rgba(15,23,42,0.08)]"
+              style={{ backgroundColor: colorInput }}
             />
-          ))}
+            <input
+              value={colorInput}
+              onChange={(event) => {
+                const next = normalizeHex(event.target.value);
+                setColorInput(next);
+              }}
+              onBlur={() => onCardColorChange(normalizeHex(colorInput))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  onCardColorChange(normalizeHex(colorInput));
+                }
+              }}
+              className="h-10 w-[104px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
+            />
+            <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300">
+              <input
+                type="color"
+                value={normalizeHex(colorInput)}
+                onChange={(event) => {
+                  setColorInput(event.target.value);
+                  onCardColorChange(event.target.value);
+                }}
+                className="sr-only"
+              />
+              <div
+                className="h-4 w-4 rounded-md border border-slate-200"
+                style={{ backgroundColor: normalizeHex(colorInput) }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={runAction(() => {
+                void openEyeDropper();
+              })}
+              disabled={!canUseEyeDropper}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-45"
+              title={canUseEyeDropper ? 'Capturar cor' : 'Conta-gotas indisponível'}
+            >
+              <Pipette className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mx-auto grid w-fit grid-cols-4 gap-x-2 gap-y-2">
+            {cardColors.map((color) => (
+              <button
+                key={color}
+                onClick={runAction(() => {
+                  setColorInput(color);
+                  onCardColorChange(color);
+                })}
+                className={`relative h-7 w-7 rounded-full border transition ${
+                  cardColor === color
+                    ? 'scale-105 border-slate-200 shadow-[0_0_0_1px_rgba(226,232,240,0.95),0_6px_14px_rgba(15,23,42,0.08)]'
+                    : 'border-white/90 hover:scale-105 hover:border-slate-100 hover:shadow-[0_4px_10px_rgba(15,23,42,0.06)]'
+                }`}
+                style={{ backgroundColor: color }}
+                title={color}
+              >
+                {cardColor === color && (
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <Check className={`h-3.5 w-3.5 ${color.toLowerCase() === '#ffffff' ? 'text-slate-700' : 'text-white'}`} />
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       );
     }
@@ -652,7 +723,11 @@ export default function FloatingToolbar({
             }`}
             title={isCollapsed ? 'Expandir toolbar' : 'Recolher toolbar'}
           >
-            {isCollapsed ? <ChevronRight className="h-4.5 w-4.5" /> : <ChevronLeft className="h-4.5 w-4.5" />}
+            {isCollapsed ? (
+              isRightSide ? <ChevronLeft className="h-4.5 w-4.5" /> : <ChevronRight className="h-4.5 w-4.5" />
+            ) : (
+              isRightSide ? <ChevronRight className="h-4.5 w-4.5" /> : <ChevronLeft className="h-4.5 w-4.5" />
+            )}
             {!isCollapsed && <span className="text-sm font-medium">Recolher</span>}
           </button>
         </div>

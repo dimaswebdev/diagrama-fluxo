@@ -114,7 +114,12 @@ export default function CanvasText({
             fontWeight: item.textStyle.fontWeight ?? 600,
             lineHeight: item.textStyle.lineHeight ?? 1.35,
             textAlign: item.textStyle.textAlign ?? 'left',
-            justifyContent: item.textStyle.textAlign === 'center' ? 'center' : 'flex-start',
+            justifyContent:
+              item.textStyle.textAlign === 'center'
+                ? 'center'
+                : item.textStyle.textAlign === 'right'
+                ? 'flex-end'
+                : 'flex-start',
           }}
         >
           {item.text}

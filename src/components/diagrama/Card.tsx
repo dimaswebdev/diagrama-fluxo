@@ -166,7 +166,12 @@ function Card({
               {card.sequence}
             </div>
 
-            <div>
+            <div
+              style={{
+                flex: 1,
+                textAlign: cardTextAlign,
+              }}
+            >
               <div className="font-semibold leading-tight" style={{ fontSize: titleFontSize, color: cardTextColor, textAlign: cardTextAlign }}>{card.title}</div>
               <div className="text-xs text-gray-500">{card.date}</div>
             </div>
@@ -198,7 +203,18 @@ function Card({
           )}
 
           {(card.label || card.source) && (
-            <div className="mt-3 flex justify-between text-xs text-gray-500">
+            <div
+              className="mt-3 flex text-xs text-gray-500"
+              style={{
+                justifyContent:
+                  cardTextAlign === 'center'
+                    ? 'center'
+                    : cardTextAlign === 'right'
+                    ? 'flex-end'
+                    : 'space-between',
+                gap: cardTextAlign === 'left' ? 12 : 8,
+              }}
+            >
               <span>{card.label}</span>
               <span>{card.source}</span>
             </div>

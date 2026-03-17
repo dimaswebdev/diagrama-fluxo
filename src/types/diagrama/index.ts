@@ -4,6 +4,7 @@ export interface Card {
   y: number;
   width: number;
   height: number;
+  layer?: number;
   sequence: number;
   title: string;
   content: string;
@@ -21,7 +22,7 @@ export interface Card {
 export interface TextStyle {
   fontSize: number;
   fontWeight?: 400 | 500 | 600 | 700;
-  textAlign?: 'left' | 'center';
+  textAlign?: 'left' | 'center' | 'right';
   lineHeight?: number;
   color?: string;
 }
@@ -32,6 +33,7 @@ export interface DiagramText {
   y: number;
   width: number;
   height: number;
+  layer?: number;
   text: string;
   accent: string;
   background?: string;
@@ -44,6 +46,7 @@ export interface GroupBox {
   y: number;
   width: number;
   height: number;
+  layer?: number;
   title: string;
   accent: string;
   background: string;

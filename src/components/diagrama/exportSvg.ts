@@ -13,6 +13,9 @@ export type ExportSvgOptions = {
 export type Bounds = { x: number; y: number; width: number; height: number };
 
 const SYSTEM_FONT_STACK = "Inter, 'Segoe UI', Arial, sans-serif";
+const DEFAULT_GROUP_LAYER = -100;
+const DEFAULT_CARD_LAYER = 0;
+const DEFAULT_TEXT_LAYER = 100;
 
 const esc = (s: string) =>
   s
@@ -359,39 +362,56 @@ export function buildExportSvg(params: {
       })()
     : '';
 
+  const groupSvgMap = new Map(
+    groupBoxes.map((groupBox) => {
+      const title = esc(groupBox.title);
+      const align = groupBox.titleStyle.textAlign ?? 'center';
+      const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
+      const titleX =
+        align === 'left'
+          ? groupBox.x + 30
+          : align === 'right'
+          ? groupBox.x + groupBox.width - 30
+          : groupBox.x + groupBox.width / 2;
+      return [
+        groupBox.id,
+        `
+          <g>
+            <rect x="${groupBox.x}" y="${groupBox.y}" width="${groupBox.width}" height="${groupBox.height}"
+              rx="28" ry="28"
+              fill="${groupBox.background}"
+              stroke="${groupBox.accent}"
+              stroke-width="1.5"
+            />
+            <rect x="${groupBox.x + 18}" y="${groupBox.y + 16}" width="${groupBox.width - 36}" height="42"
+              rx="14" ry="14"
+              fill="rgba(255,255,255,0.58)"
+              stroke="rgba(255,255,255,0.72)"
+              stroke-width="1"
+            />
+            <text x="${titleX}" y="${groupBox.y + 42}"
+              text-anchor="${anchor}"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="${groupBox.titleStyle.fontSize}"
+              font-weight="${groupBox.titleStyle.fontWeight ?? 700}"
+              fill="${groupBox.titleStyle.color ?? '#111827'}">
+              ${title}
+            </text>
+          </g>
+        `,
+      ];
+    })
+  );
+
   const groupSvg = groupBoxes
     .map((groupBox) => {
-      const title = esc(groupBox.title);
-      return `
-        <g>
-          <rect x="${groupBox.x}" y="${groupBox.y}" width="${groupBox.width}" height="${groupBox.height}"
-            rx="28" ry="28"
-            fill="${groupBox.background}"
-            stroke="${groupBox.accent}"
-            stroke-width="1.5"
-          />
-          <rect x="${groupBox.x + 18}" y="${groupBox.y + 16}" width="${groupBox.width - 36}" height="42"
-            rx="14" ry="14"
-            fill="rgba(255,255,255,0.58)"
-            stroke="rgba(255,255,255,0.72)"
-            stroke-width="1"
-          />
-          <text x="${groupBox.x + groupBox.width / 2}" y="${groupBox.y + 42}"
-            text-anchor="middle"
-            font-family="${SYSTEM_FONT_STACK}"
-            font-size="${groupBox.titleStyle.fontSize}"
-            font-weight="${groupBox.titleStyle.fontWeight ?? 700}"
-            fill="${groupBox.titleStyle.color ?? '#111827'}">
-            ${title}
-          </text>
-        </g>
-      `;
+      return groupSvgMap.get(groupBox.id) ?? '';
     })
     .join('');
 
   // CARDS
-  const cardSvg = cards
-    .map((c) => {
+  const cardSvgMap = new Map(
+    cards.map((c) => {
       const r = 18;
       const stroke = c.accent || '#2563eb';
       const fillOpacity = 0.13;
@@ -407,99 +427,143 @@ export function buildExportSvg(params: {
 
       const tx = c.x + 18;
       const ty = c.y + 30;
+      const textAlign = c.textStyle?.textAlign ?? 'left';
+      const titleAnchor = textAlign === 'center' ? 'middle' : textAlign === 'right' ? 'end' : 'start';
+      const titleX =
+        textAlign === 'center'
+          ? c.x + c.width / 2
+          : textAlign === 'right'
+          ? c.x + c.width - 18
+          : tx + 26;
+      const contentX =
+        textAlign === 'center'
+          ? c.x + c.width / 2
+          : textAlign === 'right'
+          ? c.x + c.width - 18
+          : tx + 26;
 
-      return `
-        <g>
-          <rect x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}"
-            rx="${r}" ry="${r}"
-            fill="${stroke}"
-            fill-opacity="${fillOpacity}"
-            stroke="${stroke}"
-            stroke-width="2"
-          />
+      return [
+        c.id,
+        `
+          <g>
+            <rect x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}"
+              rx="${r}" ry="${r}"
+              fill="${stroke}"
+              fill-opacity="${fillOpacity}"
+              stroke="${stroke}"
+              stroke-width="2"
+            />
 
-          <circle cx="${c.x + 26}" cy="${c.y + 26}" r="12"
-            fill="${stroke}"
-          />
+            <circle cx="${c.x + 26}" cy="${c.y + 26}" r="12"
+              fill="${stroke}"
+            />
 
-          <text x="${c.x + 26}" y="${c.y + 30}" text-anchor="middle"
-            font-family="${SYSTEM_FONT_STACK}"
-            font-size="12"
-            fill="#ffffff">
-            ${esc(String(c.sequence ?? ''))}
-          </text>
+            <text x="${c.x + 26}" y="${c.y + 30}" text-anchor="middle"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="12"
+              fill="#ffffff">
+              ${esc(String(c.sequence ?? ''))}
+            </text>
 
-          <text x="${tx + 26}" y="${ty}"
-            font-family="${SYSTEM_FONT_STACK}"
-            font-size="${c.textStyle?.fontSize ?? 14}"
-            font-weight="${c.textStyle?.fontWeight ?? 700}"
-            fill="${c.textStyle?.color ?? '#111827'}">
-            ${title}
-          </text>
+            <text x="${titleX}" y="${ty}"
+              text-anchor="${titleAnchor}"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="${c.textStyle?.fontSize ?? 14}"
+              font-weight="${c.textStyle?.fontWeight ?? 700}"
+              fill="${c.textStyle?.color ?? '#111827'}">
+              ${title}
+            </text>
 
-          <text x="${tx + 26}" y="${ty + 16}"
-            font-family="${SYSTEM_FONT_STACK}"
-            font-size="10.5"
-            fill="#6b7280">
-            ${date}
-          </text>
+            <text x="${titleX}" y="${ty + 16}"
+              text-anchor="${titleAnchor}"
+              font-family="${SYSTEM_FONT_STACK}"
+              font-size="10.5"
+              fill="#6b7280">
+              ${date}
+            </text>
 
-          ${
-            contentLines.length
-              ? contentLines
-                  .map(
-                    (ln, i) =>
-                      `<text x="${tx + 26}" y="${
-                        ty + 48 + i * 14
-                      }"
-                        font-family="${SYSTEM_FONT_STACK}"
-                        font-size="${Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)}"
-                        fill="${c.textStyle?.color ?? '#374151'}">
-                        ${esc(ln)}
-                      </text>`
-                  )
-                  .join('')
-              : ''
-          }
+            ${
+              contentLines.length
+                ? contentLines
+                    .map(
+                      (ln, i) =>
+                      `<text x="${contentX}" y="${
+                          ty + 48 + i * 14
+                        }"
+                          text-anchor="${titleAnchor}"
+                          font-family="${SYSTEM_FONT_STACK}"
+                          font-size="${Math.max(11, (c.textStyle?.fontSize ?? 14) * 0.82)}"
+                          fill="${c.textStyle?.color ?? '#374151'}">
+                          ${esc(ln)}
+                        </text>`
+                    )
+                    .join('')
+                : ''
+            }
 
-          ${
-            c.label
-              ? `<text x="${c.x + 18}" y="${
-                  c.y + c.height - 14
-                }"
-                font-family="${SYSTEM_FONT_STACK}"
-                font-size="10.5"
-                fill="#6b7280">
-                ${esc(c.label)}
-              </text>`
-              : ''
-          }
-        </g>
-      `;
+            ${
+              c.label
+                ? `<text x="${textAlign === 'right' ? c.x + c.width - 18 : textAlign === 'center' ? c.x + c.width / 2 : c.x + 18}" y="${
+                    c.y + c.height - 14
+                  }"
+                  text-anchor="${titleAnchor}"
+                  font-family="${SYSTEM_FONT_STACK}"
+                  font-size="10.5"
+                  fill="#6b7280">
+                  ${esc(c.label)}
+                </text>`
+                : ''
+            }
+          </g>
+        `,
+      ];
+    })
+  );
+
+  const cardSvg = cards
+    .map((c) => {
+      return cardSvgMap.get(c.id) ?? '';
     })
     .join('');
 
-  const textSvg = texts
-    .map((item) => {
+  const textSvgMap = new Map(
+    texts.map((item) => {
       const lines = (item.text || '').split('\n').filter(Boolean);
       const startY = item.y + item.textStyle.fontSize;
-      return `
-        <g>
-          ${item.background ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="18" fill="${item.background}" />` : ''}
-          ${lines
-            .map(
-              (line, index) => `<text
-                x="${item.textStyle.textAlign === 'center' ? item.x + item.width / 2 : item.x + 12}"
-                y="${startY + index * item.textStyle.fontSize * (item.textStyle.lineHeight ?? 1.15)}"
-                ${item.textStyle.textAlign === 'center' ? 'text-anchor="middle"' : ''}
-                font-family="${SYSTEM_FONT_STACK}"
-                font-size="${item.textStyle.fontSize}"
-                font-weight="${item.textStyle.fontWeight ?? 700}"
-                fill="${item.textStyle.color ?? '#111827'}">${esc(line)}</text>`
-            )
-            .join('')}
-        </g>
-      `;
+      const textAlign = item.textStyle.textAlign ?? 'left';
+      const anchor = textAlign === 'center' ? 'middle' : textAlign === 'right' ? 'end' : 'start';
+      const textX =
+        textAlign === 'center'
+          ? item.x + item.width / 2
+          : textAlign === 'right'
+          ? item.x + item.width - 12
+          : item.x + 12;
+      return [
+        item.id,
+        `
+          <g>
+            ${item.background ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="18" fill="${item.background}" />` : ''}
+            ${lines
+              .map(
+                (line, index) => `<text
+                  x="${textX}"
+                  y="${startY + index * item.textStyle.fontSize * (item.textStyle.lineHeight ?? 1.15)}"
+                  text-anchor="${anchor}"
+                  font-family="${SYSTEM_FONT_STACK}"
+                  font-size="${item.textStyle.fontSize}"
+                  font-weight="${item.textStyle.fontWeight ?? 700}"
+                  fill="${item.textStyle.color ?? '#111827'}">${esc(line)}</text>`
+              )
+              .join('')}
+          </g>
+        `,
+      ];
+    })
+  );
+
+  const textSvg = texts
+    .map((item) => {
+      return textSvgMap.get(item.id) ?? '';
     })
     .join('');
 
@@ -579,6 +643,27 @@ export function buildExportSvg(params: {
     })
     .join('');
 
+  const layeredElements = [
+    ...groupBoxes.map((item) => ({
+      layer: item.layer ?? DEFAULT_GROUP_LAYER,
+      id: `group-${item.id}`,
+      markup: groupSvgMap.get(item.id) ?? '',
+    })),
+    ...cards.map((item) => ({
+      layer: item.layer ?? DEFAULT_CARD_LAYER,
+      id: `card-${item.id}`,
+      markup: cardSvgMap.get(item.id) ?? '',
+    })),
+    ...texts.map((item) => ({
+      layer: item.layer ?? DEFAULT_TEXT_LAYER,
+      id: `text-${item.id}`,
+      markup: textSvgMap.get(item.id) ?? '',
+    })),
+  ]
+    .sort((a, b) => a.layer - b.layer || a.id.localeCompare(b.id))
+    .map((item) => item.markup)
+    .join('');
+
   return `
   <svg xmlns="http://www.w3.org/2000/svg"
        width="${viewBox.width}"
@@ -590,10 +675,8 @@ export function buildExportSvg(params: {
           fill="${opts.background}" />
     ${grid}
     <g>
-      ${groupSvg}
       ${connSvg}
-      ${cardSvg}
-      ${textSvg}
+      ${layeredElements}
     </g>
   </svg>
   `;

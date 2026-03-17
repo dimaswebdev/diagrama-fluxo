@@ -6,6 +6,7 @@ import Card, { type ResizeDirection } from './Card';
 import CanvasText from './CanvasText';
 import ConnectionLine from './ConnectionLine';
 import GroupBox from './GroupBox';
+import PropertiesPanel from './PropertiesPanel';
 import {
   doesConnectionIntersectSelectionBox,
   getClosestSideForPoint,
@@ -110,6 +111,14 @@ const DEFAULT_GROUP_TITLE_STYLE = {
   lineHeight: 1.1,
   color: '#111827',
 };
+const DEFAULT_GROUP_LAYER = -100;
+const DEFAULT_CARD_LAYER = 0;
+const DEFAULT_TEXT_LAYER = 100;
+const LAYER_STEP = 10;
+
+const getCardLayer = (card: CardType) => card.layer ?? DEFAULT_CARD_LAYER;
+const getTextLayer = (item: DiagramText) => item.layer ?? DEFAULT_TEXT_LAYER;
+const getGroupLayer = (item: GroupBoxType) => item.layer ?? DEFAULT_GROUP_LAYER;
 
 const estimateTextHeight = (
   text: string,
@@ -128,6 +137,26 @@ const estimateTextHeight = (
   }
 
   return Math.max(TEXT_MIN_HEIGHT, Math.ceil(lineCount * fontSize * lineHeight + 24));
+};
+
+const hexToRgba = (hex: string, alpha: number) => {
+  const normalized = hex.replace('#', '');
+  const value = normalized.length === 3
+    ? normalized
+        .split('')
+        .map((char) => char + char)
+        .join('')
+    : normalized;
+
+  if (!/^[0-9a-f]{6}$/i.test(value)) {
+    return `rgba(148,163,184,${alpha})`;
+  }
+
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 };
 
 const Diagrama: React.FC = () => {
@@ -446,6 +475,7 @@ const Diagrama: React.FC = () => {
       y,
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
+      layer: DEFAULT_CARD_LAYER,
       sequence,
       title: title ?? preset.title,
       content: content ?? preset.content,
@@ -499,43 +529,6 @@ const Diagrama: React.FC = () => {
     () => cards.find((card) => card.id === editingInlineCardId) ?? null,
     [cards, editingInlineCardId]
   );
-
-  const typographySelection = useMemo(() => {
-    const selectedCard = selectedCards.size === 1 ? cards.find((card) => card.id === Array.from(selectedCards)[0]) ?? null : null;
-    const selectedText = selectedTexts.size === 1 ? texts.find((item) => item.id === Array.from(selectedTexts)[0]) ?? null : null;
-    const selectedGroupBox =
-      selectedGroupBoxes.size === 1 ? groupBoxes.find((item) => item.id === Array.from(selectedGroupBoxes)[0]) ?? null : null;
-
-    if (selectedCard) {
-      return {
-        canAdjust: true,
-        size: selectedCard.textStyle?.fontSize ?? DEFAULT_CARD_TEXT_STYLE.fontSize,
-        align: selectedCard.textStyle?.textAlign ?? DEFAULT_CARD_TEXT_STYLE.textAlign,
-      };
-    }
-
-    if (selectedText) {
-      return {
-        canAdjust: true,
-        size: selectedText.textStyle.fontSize,
-        align: selectedText.textStyle.textAlign ?? 'left',
-      };
-    }
-
-    if (selectedGroupBox) {
-      return {
-        canAdjust: true,
-        size: selectedGroupBox.titleStyle.fontSize,
-        align: selectedGroupBox.titleStyle.textAlign ?? 'center',
-      };
-    }
-
-    return {
-      canAdjust: false,
-      size: DEFAULT_CARD_TEXT_STYLE.fontSize,
-      align: DEFAULT_CARD_TEXT_STYLE.textAlign,
-    };
-  }, [cards, groupBoxes, selectedCards, selectedGroupBoxes, selectedTexts, texts]);
 
   const applyTypographySize = useCallback(
     (fontSize: number) => {
@@ -600,7 +593,7 @@ const Diagrama: React.FC = () => {
   );
 
   const applyTypographyAlign = useCallback(
-    (textAlign: 'left' | 'center') => {
+    (textAlign: 'left' | 'center' | 'right') => {
       if (selectedCards.size > 0) {
         const nextCards = cards.map((card) =>
           selectedCards.has(card.id)
@@ -653,6 +646,284 @@ const Diagrama: React.FC = () => {
       }
     },
     [cards, getDiagramState, groupBoxes, saveToHistory, selectedCards, selectedGroupBoxes, selectedTexts, setCards, setGroupBoxes, setTexts, texts]
+  );
+
+  const propertiesSelection = useMemo(() => {
+    if (selectedCards.size === 1) {
+      const item = cards.find((card) => card.id === Array.from(selectedCards)[0]);
+      return item ? { kind: 'card' as const, item } : null;
+    }
+
+    if (selectedTexts.size === 1) {
+      const item = texts.find((text) => text.id === Array.from(selectedTexts)[0]);
+      return item ? { kind: 'text' as const, item } : null;
+    }
+
+    if (selectedGroupBoxes.size === 1) {
+      const item = groupBoxes.find((groupBox) => groupBox.id === Array.from(selectedGroupBoxes)[0]);
+      return item ? { kind: 'group' as const, item } : null;
+    }
+
+    if (selectedConnections.size === 1) {
+      const item = connections.find((connection) => connection.id === Array.from(selectedConnections)[0]);
+      return item ? { kind: 'connection' as const, item } : null;
+    }
+
+    return null;
+  }, [cards, connections, groupBoxes, selectedCards, selectedConnections, selectedGroupBoxes, selectedTexts, texts]);
+
+  const applyLayerChangeFromPanel = useCallback(
+    (direction: 'front' | 'forward' | 'backward' | 'back') => {
+      if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
+      const allLayers = [
+        ...cards.map((card) => getCardLayer(card)),
+        ...texts.map((item) => getTextLayer(item)),
+        ...groupBoxes.map((item) => getGroupLayer(item)),
+      ];
+      const maxLayer = allLayers.length > 0 ? Math.max(...allLayers) : DEFAULT_CARD_LAYER;
+      const minLayer = allLayers.length > 0 ? Math.min(...allLayers) : DEFAULT_GROUP_LAYER;
+
+      const getNextLayer = (current: number) => {
+        if (direction === 'front') return maxLayer + LAYER_STEP;
+        if (direction === 'back') return minLayer - LAYER_STEP;
+        return current + (direction === 'forward' ? LAYER_STEP : -LAYER_STEP);
+      };
+
+      if (propertiesSelection.kind === 'card') {
+        const nextCards = cards.map((card) =>
+          card.id === propertiesSelection.item.id
+            ? { ...card, layer: getNextLayer(getCardLayer(card)) }
+            : card
+        );
+        setCards(nextCards);
+        saveToHistory(getDiagramState({ cards: nextCards }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'text') {
+        const nextTexts = texts.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, layer: getNextLayer(getTextLayer(item)) }
+            : item
+        );
+        setTexts(nextTexts);
+        saveToHistory(getDiagramState({ texts: nextTexts }));
+        return;
+      }
+
+      const nextGroupBoxes = groupBoxes.map((item) =>
+        item.id === propertiesSelection.item.id
+          ? { ...item, layer: getNextLayer(getGroupLayer(item)) }
+          : item
+      );
+      setGroupBoxes(nextGroupBoxes);
+      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+    },
+    [cards, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setGroupBoxes, setTexts, texts]
+  );
+
+  const canvasElements = useMemo(() => {
+    return [
+      ...groupBoxes.map((item) => ({
+        kind: 'group' as const,
+        id: item.id,
+        layer: getGroupLayer(item),
+        item,
+      })),
+      ...cards.map((item) => ({
+        kind: 'card' as const,
+        id: item.id,
+        layer: getCardLayer(item),
+        item,
+      })),
+      ...texts.map((item) => ({
+        kind: 'text' as const,
+        id: item.id,
+        layer: getTextLayer(item),
+        item,
+      })),
+    ].sort((a, b) => a.layer - b.layer || a.id.localeCompare(b.id));
+  }, [cards, groupBoxes, texts]);
+
+  const applyAccentFromPanel = useCallback(
+    (value: string) => {
+      if (!propertiesSelection) return;
+
+      if (propertiesSelection.kind === 'card') {
+        const nextCards = cards.map((card) =>
+          card.id === propertiesSelection.item.id ? { ...card, accent: value } : card
+        );
+        setCards(nextCards);
+        saveToHistory(getDiagramState({ cards: nextCards }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'text') {
+        const nextTexts = texts.map((item) =>
+          item.id === propertiesSelection.item.id ? { ...item, accent: value } : item
+        );
+        setTexts(nextTexts);
+        saveToHistory(getDiagramState({ texts: nextTexts }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'group') {
+        const nextGroupBoxes = groupBoxes.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, accent: value, background: hexToRgba(value, 0.12) }
+            : item
+        );
+        setGroupBoxes(nextGroupBoxes);
+        saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+        return;
+      }
+
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, color: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [cards, connections, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setConnections, setGroupBoxes, setTexts, texts]
+  );
+
+  const applyTextColorFromPanel = useCallback(
+    (value: string) => {
+      if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
+
+      if (propertiesSelection.kind === 'card') {
+        const nextCards = cards.map((card) =>
+          card.id === propertiesSelection.item.id
+            ? { ...card, textStyle: { ...DEFAULT_CARD_TEXT_STYLE, ...card.textStyle, color: value } }
+            : card
+        );
+        setCards(nextCards);
+        saveToHistory(getDiagramState({ cards: nextCards }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'text') {
+        const nextTexts = texts.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, textStyle: { ...item.textStyle, color: value } }
+            : item
+        );
+        setTexts(nextTexts);
+        saveToHistory(getDiagramState({ texts: nextTexts }));
+        return;
+      }
+
+      const nextGroupBoxes = groupBoxes.map((item) =>
+        item.id === propertiesSelection.item.id
+          ? { ...item, titleStyle: { ...item.titleStyle, color: value } }
+          : item
+      );
+      setGroupBoxes(nextGroupBoxes);
+      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+    },
+    [cards, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setGroupBoxes, setTexts, texts]
+  );
+
+  const applyFontWeightFromPanel = useCallback(
+    (value: 400 | 500 | 600 | 700) => {
+      if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
+
+      if (propertiesSelection.kind === 'card') {
+        const nextCards = cards.map((card) =>
+          card.id === propertiesSelection.item.id
+            ? { ...card, textStyle: { ...DEFAULT_CARD_TEXT_STYLE, ...card.textStyle, fontWeight: value } }
+            : card
+        );
+        setCards(nextCards);
+        saveToHistory(getDiagramState({ cards: nextCards }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'text') {
+        const nextTexts = texts.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, textStyle: { ...item.textStyle, fontWeight: value } }
+            : item
+        );
+        setTexts(nextTexts);
+        saveToHistory(getDiagramState({ texts: nextTexts }));
+        return;
+      }
+
+      const nextGroupBoxes = groupBoxes.map((item) =>
+        item.id === propertiesSelection.item.id
+          ? { ...item, titleStyle: { ...item.titleStyle, fontWeight: value } }
+          : item
+      );
+      setGroupBoxes(nextGroupBoxes);
+      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+    },
+    [cards, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setGroupBoxes, setTexts, texts]
+  );
+
+  const applyBackgroundOpacityFromPanel = useCallback(
+    (percent: number) => {
+      if (!propertiesSelection) return;
+      const alpha = Math.max(0, Math.min(100, percent)) / 100;
+
+      if (propertiesSelection.kind === 'text') {
+        const nextTexts = texts.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, background: alpha === 0 ? 'transparent' : hexToRgba(item.accent, alpha) }
+            : item
+        );
+        setTexts(nextTexts);
+        saveToHistory(getDiagramState({ texts: nextTexts }));
+        return;
+      }
+
+      if (propertiesSelection.kind === 'group') {
+        const nextGroupBoxes = groupBoxes.map((item) =>
+          item.id === propertiesSelection.item.id
+            ? { ...item, background: hexToRgba(item.accent, alpha) }
+            : item
+        );
+        setGroupBoxes(nextGroupBoxes);
+        saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
+      }
+    },
+    [getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setGroupBoxes, setTexts, texts]
+  );
+
+  const applyConnectionLabelFromPanel = useCallback(
+    (value: string) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'connection') return;
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, label: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
+  );
+
+  const applyConnectionTypeFromPanel = useCallback(
+    (value: ConnectionType) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'connection') return;
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, type: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
+  );
+
+  const applyConnectionRouteFromPanel = useCallback(
+    (value: ConnectionRouteStyle) => {
+      if (!propertiesSelection || propertiesSelection.kind !== 'connection') return;
+      const nextConnections = connections.map((connection) =>
+        connection.id === propertiesSelection.item.id ? { ...connection, routeStyle: value } : connection
+      );
+      setConnections(nextConnections);
+      saveToHistory(getDiagramState({ connections: nextConnections }));
+    },
+    [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
   );
 
   const openInlineEditor = useCallback((card: CardType) => {
@@ -1081,6 +1352,7 @@ const Diagrama: React.FC = () => {
       y: viewportCenter.y - 32,
       width: 340,
       height: 64,
+      layer: DEFAULT_TEXT_LAYER,
       text: 'Título ou observação',
       accent: '#111827',
       background: 'transparent',
@@ -1111,6 +1383,7 @@ const Diagrama: React.FC = () => {
       y: viewportCenter.y - 160,
       width: 440,
       height: 320,
+      layer: DEFAULT_GROUP_LAYER,
       title: 'Classe de eventos',
       accent,
       background: 'rgba(148,163,184,0.12)',
@@ -2202,11 +2475,6 @@ const Diagrama: React.FC = () => {
         onAddCard={addCard}
         onAddText={addText}
         onAddGroupBox={addGroupBox}
-        canAdjustTypography={typographySelection.canAdjust}
-        typographySize={typographySelection.size}
-        typographyAlign={typographySelection.align}
-        onTypographySizeChange={applyTypographySize}
-        onTypographyAlignChange={applyTypographyAlign}
         connectionType={connectionType}
         onConnectionTypeChange={setConnectionType}
         connectionRouteStyle={connectionRouteStyle}
@@ -2268,6 +2536,26 @@ const Diagrama: React.FC = () => {
         onFitView={handleFitView}
         isCanvasMoveActive={isCanvasMoveActive}
         onToggleCanvasMove={() => setIsCanvasMoveActive((value) => !value)}
+      />
+
+      <PropertiesPanel
+        selection={propertiesSelection}
+        onClose={() => {
+          setSelectedCards(new Set());
+          setSelectedConnections(new Set());
+          setSelectedTexts(new Set());
+          setSelectedGroupBoxes(new Set());
+        }}
+        onAccentChange={applyAccentFromPanel}
+        onTextColorChange={applyTextColorFromPanel}
+        onFontSizeChange={applyTypographySize}
+        onFontWeightChange={applyFontWeightFromPanel}
+        onTextAlignChange={applyTypographyAlign}
+        onBackgroundOpacityChange={applyBackgroundOpacityFromPanel}
+        onConnectionLabelChange={applyConnectionLabelFromPanel}
+        onConnectionTypeChange={applyConnectionTypeFromPanel}
+        onConnectionRouteStyleChange={applyConnectionRouteFromPanel}
+        onLayerChange={applyLayerChangeFromPanel}
       />
 
       {/* Ãrea do diagrama */}
@@ -2484,105 +2772,109 @@ const Diagrama: React.FC = () => {
             })()}
           </svg>
 
-          <div style={{ position: 'relative', zIndex: 8 }}>
-            {groupBoxes.map((item) => (
-              <GroupBox
-                key={item.id}
-                item={item}
-                isSelected={selectedGroupBoxes.has(item.id)}
-                isEditing={editingGroupBoxId === item.id}
-                draftValue={editingGroupBoxId === item.id ? editingGroupDraft : item.title}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setSelectedGroupBoxes(new Set([item.id]));
-                  setSelectedCards(new Set());
-                  setSelectedConnections(new Set());
-                  setSelectedTexts(new Set());
-                }}
-                onDoubleClick={(event) => {
-                  event.stopPropagation();
-                  openGroupEditor(item);
-                }}
-                onDragStart={(event) => handleGroupBoxDragStart(item.id, event)}
-                onResizeStart={(direction, event) => handleGroupBoxResizeStart(item.id, direction, event)}
-                onDraftChange={setEditingGroupDraft}
-                onCommit={applyGroupEditor}
-                onCancel={cancelGroupEditor}
-              />
-            ))}
-          </div>
-
-          {/* Cards */}
           <div style={{ position: 'relative', zIndex: 20 }}>
-            {cards.map((card) => (
-              <Card
-                key={card.id}
-                card={card}
-                scale={scale}
-                offset={offset}
-                isSelected={selectedCards.has(card.id)}
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
+            {canvasElements.map((element) => {
+              if (element.kind === 'group') {
+                const item = element.item;
+                return (
+                  <GroupBox
+                    key={`group-${item.id}`}
+                    item={item}
+                    isSelected={selectedGroupBoxes.has(item.id)}
+                    isEditing={editingGroupBoxId === item.id}
+                    draftValue={editingGroupBoxId === item.id ? editingGroupDraft : item.title}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedGroupBoxes(new Set([item.id]));
+                      setSelectedCards(new Set());
+                      setSelectedConnections(new Set());
+                      setSelectedTexts(new Set());
+                    }}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation();
+                      openGroupEditor(item);
+                    }}
+                    onDragStart={(event) => handleGroupBoxDragStart(item.id, event)}
+                    onResizeStart={(direction, event) => handleGroupBoxResizeStart(item.id, direction, event)}
+                    onDraftChange={setEditingGroupDraft}
+                    onCommit={applyGroupEditor}
+                    onCancel={cancelGroupEditor}
+                  />
+                );
+              }
 
-                  if (suppressCardClickRef.current) {
-                    suppressCardClickRef.current = false;
-                    return;
-                  }
+              if (element.kind === 'text') {
+                const item = element.item;
+                return (
+                  <CanvasText
+                    key={`text-${item.id}`}
+                    item={editingTextId === item.id ? { ...item, text: editingTextDraft } : item}
+                    isSelected={selectedTexts.has(item.id)}
+                    isEditing={editingTextId === item.id}
+                    draftValue={editingTextId === item.id ? editingTextDraft : item.text}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedTexts(new Set([item.id]));
+                      setSelectedCards(new Set());
+                      setSelectedConnections(new Set());
+                      setSelectedGroupBoxes(new Set());
+                    }}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation();
+                      openTextEditor(item);
+                    }}
+                    onDragStart={(event) => handleTextDragStart(item.id, event)}
+                    onResizeStart={(direction, event) => handleTextResizeStart(item.id, direction, event)}
+                    onDraftChange={setEditingTextDraft}
+                    onCommit={applyTextEditor}
+                    onCancel={cancelTextEditor}
+                  />
+                );
+              }
 
-                  if (editingInlineCardId && editingInlineCardId !== card.id) {
-                    cancelInlineEditor();
-                  }
+              const card = element.item;
+              return (
+                <Card
+                  key={`card-${card.id}`}
+                  card={card}
+                  scale={scale}
+                  offset={offset}
+                  isSelected={selectedCards.has(card.id)}
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
 
-                  if (e.ctrlKey || e.metaKey) {
-                    setSelectedCards((prev) => {
-                      const updated = new Set(prev);
-                      updated.has(card.id) ? updated.delete(card.id) : updated.add(card.id);
-                      return updated;
-                    });
-                  } else {
-                    setSelectedCards(new Set([card.id]));
-                    setSelectedConnections(new Set());
-                    setSelectedTexts(new Set());
-                    setSelectedGroupBoxes(new Set());
-                  }
-                }}
-                onDoubleClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  openInlineEditor(card);
-                }}
-                onDragStart={(e: React.MouseEvent) => handleCardDragStart(card.id, e)}
-                onResizeStart={(direction, event) => handleCardResizeStart(card.id, direction, event)}
-                onConnectionStart={(side: ConnectionSide, point: Point) => handleConnectionStart(card.id, side, point)}
-              />
-            ))}
-          </div>
+                    if (suppressCardClickRef.current) {
+                      suppressCardClickRef.current = false;
+                      return;
+                    }
 
-          <div style={{ position: 'relative', zIndex: 24 }}>
-            {texts.map((item) => (
-              <CanvasText
-                key={item.id}
-                item={editingTextId === item.id ? { ...item, text: editingTextDraft } : item}
-                isSelected={selectedTexts.has(item.id)}
-                isEditing={editingTextId === item.id}
-                draftValue={editingTextId === item.id ? editingTextDraft : item.text}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setSelectedTexts(new Set([item.id]));
-                  setSelectedCards(new Set());
-                  setSelectedConnections(new Set());
-                  setSelectedGroupBoxes(new Set());
-                }}
-                onDoubleClick={(event) => {
-                  event.stopPropagation();
-                  openTextEditor(item);
-                }}
-                onDragStart={(event) => handleTextDragStart(item.id, event)}
-                onResizeStart={(direction, event) => handleTextResizeStart(item.id, direction, event)}
-                onDraftChange={setEditingTextDraft}
-                onCommit={applyTextEditor}
-                onCancel={cancelTextEditor}
-              />
-            ))}
+                    if (editingInlineCardId && editingInlineCardId !== card.id) {
+                      cancelInlineEditor();
+                    }
+
+                    if (e.ctrlKey || e.metaKey) {
+                      setSelectedCards((prev) => {
+                        const updated = new Set(prev);
+                        updated.has(card.id) ? updated.delete(card.id) : updated.add(card.id);
+                        return updated;
+                      });
+                    } else {
+                      setSelectedCards(new Set([card.id]));
+                      setSelectedConnections(new Set());
+                      setSelectedTexts(new Set());
+                      setSelectedGroupBoxes(new Set());
+                    }
+                  }}
+                  onDoubleClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    openInlineEditor(card);
+                  }}
+                  onDragStart={(e: React.MouseEvent) => handleCardDragStart(card.id, e)}
+                  onResizeStart={(direction, event) => handleCardResizeStart(card.id, direction, event)}
+                  onConnectionStart={(side: ConnectionSide, point: Point) => handleConnectionStart(card.id, side, point)}
+                />
+              );
+            })}
           </div>
 
           {/* Caixa de seleÃ§Ã£o */}

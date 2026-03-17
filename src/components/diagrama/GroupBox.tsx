@@ -95,7 +95,7 @@ export default function GroupBox({
                 onCommit();
               }
             }}
-            className="w-full rounded-xl border border-white/80 bg-white/70 px-3 py-2 outline-none"
+            className="w-full rounded-xl border border-white/60 bg-white/20 px-3 py-2 outline-none"
             style={{
               color: item.titleStyle.color ?? '#0f172a',
               fontSize: item.titleStyle.fontSize,
@@ -105,7 +105,7 @@ export default function GroupBox({
           />
         ) : (
           <div
-            className="rounded-xl border border-white/70 bg-white/55 px-3 py-2 uppercase tracking-[0.04em]"
+            className="px-3 py-2 uppercase tracking-[0.04em]"
             style={{
               color: item.titleStyle.color ?? '#0f172a',
               fontSize: item.titleStyle.fontSize,
