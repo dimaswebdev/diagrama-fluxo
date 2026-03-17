@@ -579,7 +579,7 @@ export function buildExportSvg(params: {
               text-anchor="middle"
               font-family="${SYSTEM_FONT_STACK}"
               font-size="12"
-              font-weight="600"
+              font-weight="700"
               fill="#111827">
               ${date}
             </text>
@@ -590,7 +590,7 @@ export function buildExportSvg(params: {
                   text-anchor="start"
                   font-family="${SYSTEM_FONT_STACK}"
                   font-size="10.5"
-                  font-weight="500"
+                  font-weight="400"
                   fill="#64748b">
                   ${esc(c.label)}
                 </text>`
@@ -602,7 +602,7 @@ export function buildExportSvg(params: {
                   text-anchor="end"
                   font-family="${SYSTEM_FONT_STACK}"
                   font-size="10.5"
-                  font-weight="500"
+                  font-weight="400"
                   fill="#64748b">
                   ${esc(c.source)}
                 </text>`
