@@ -118,10 +118,12 @@ const DEFAULT_CONNECTION_LAYER = -50;
 const DEFAULT_CARD_LAYER = 0;
 const DEFAULT_TEXT_LAYER = 100;
 const LAYER_STEP = 10;
+const DUPLICATE_OFFSET = 40;
 
 const getCardLayer = (card: CardType) => card.layer ?? DEFAULT_CARD_LAYER;
 const getTextLayer = (item: DiagramText) => item.layer ?? DEFAULT_TEXT_LAYER;
 const getGroupLayer = (item: GroupBoxType) => item.layer ?? DEFAULT_GROUP_LAYER;
+const createUniqueId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 const estimateTextHeight = (
   text: string,
@@ -1563,6 +1565,110 @@ const Diagrama: React.FC = () => {
     cancelGroupEditor();
   }, [cancelGroupEditor, cancelInlineEditor, cancelTextEditor, cards, connections, getDiagramState, groupBoxes, saveToHistory, selectedCards, selectedConnections, selectedGroupBoxes, selectedTexts, setCards, setConnections, setGroupBoxes, setTexts, texts]);
 
+  const duplicateSelection = useCallback(() => {
+    if (
+      selectedCards.size === 0 &&
+      selectedTexts.size === 0 &&
+      selectedGroupBoxes.size === 0
+    ) {
+      return;
+    }
+
+    cancelInlineEditor();
+    cancelTextEditor();
+    cancelGroupEditor();
+
+    const selectedCardItems = cards.filter((card) => selectedCards.has(card.id));
+    const selectedTextItems = texts.filter((item) => selectedTexts.has(item.id));
+    const selectedGroupItems = groupBoxes.filter((item) => selectedGroupBoxes.has(item.id));
+
+    const selectedBounds = [
+      ...selectedCardItems.map((item) => ({ x: item.x, y: item.y })),
+      ...selectedTextItems.map((item) => ({ x: item.x, y: item.y })),
+      ...selectedGroupItems.map((item) => ({ x: item.x, y: item.y })),
+    ];
+
+    if (selectedBounds.length === 0) return;
+
+    const cardIdMap = new Map<string, string>();
+    const duplicatedCards = selectedCardItems
+      .slice()
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((card) => {
+        const id = createUniqueId();
+        cardIdMap.set(card.id, id);
+        return {
+          ...card,
+          id,
+          x: card.x + DUPLICATE_OFFSET,
+          y: card.y + DUPLICATE_OFFSET,
+          sequence: card.sequence,
+        };
+      });
+
+    const duplicatedTexts = selectedTextItems.map((item) => ({
+      ...item,
+      id: createUniqueId(),
+      x: item.x + DUPLICATE_OFFSET,
+      y: item.y + DUPLICATE_OFFSET,
+    }));
+
+    const duplicatedGroupBoxes = selectedGroupItems.map((item) => ({
+      ...item,
+      id: createUniqueId(),
+      x: item.x + DUPLICATE_OFFSET,
+      y: item.y + DUPLICATE_OFFSET,
+    }));
+
+    const duplicatedConnections = connections
+      .filter(
+        (connection) =>
+          selectedCards.has(connection.fromCard) &&
+          selectedCards.has(connection.toCard)
+      )
+      .map((connection) => ({
+        ...connection,
+        id: createUniqueId(),
+        fromCard: cardIdMap.get(connection.fromCard) ?? connection.fromCard,
+        toCard: cardIdMap.get(connection.toCard) ?? connection.toCard,
+      }));
+
+    const nextState = getDiagramState({
+      cards: [...cards, ...duplicatedCards],
+      connections: [...connections, ...duplicatedConnections],
+      texts: [...texts, ...duplicatedTexts],
+      groupBoxes: [...groupBoxes, ...duplicatedGroupBoxes],
+    });
+
+    setCards(nextState.cards);
+    setConnections(nextState.connections);
+    setTexts(nextState.texts);
+    setGroupBoxes(nextState.groupBoxes);
+    saveToHistory(nextState);
+
+    setSelectedCards(new Set(duplicatedCards.map((item) => item.id)));
+    setSelectedConnections(new Set(duplicatedConnections.map((item) => item.id)));
+    setSelectedTexts(new Set(duplicatedTexts.map((item) => item.id)));
+    setSelectedGroupBoxes(new Set(duplicatedGroupBoxes.map((item) => item.id)));
+  }, [
+    cancelGroupEditor,
+    cancelInlineEditor,
+    cancelTextEditor,
+    cards,
+    connections,
+    getDiagramState,
+    groupBoxes,
+    saveToHistory,
+    selectedCards,
+    selectedGroupBoxes,
+    selectedTexts,
+    setCards,
+    setConnections,
+    setGroupBoxes,
+    setTexts,
+    texts,
+  ]);
+
   const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
     const nextConnections = connections.map((connection) =>
       connection.id === connectionId ? { ...connection, ...updates } : connection
@@ -1676,6 +1782,12 @@ const Diagrama: React.FC = () => {
         return;
       }
 
+      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateSelection();
+        return;
+      }
+
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
         setShowPrintDialog(true);
@@ -1714,6 +1826,7 @@ const Diagrama: React.FC = () => {
     cards,
     cancelConnection,
     deleteSelected,
+    duplicateSelection,
     handleFitView,
     handleNewFile,
     isConnecting,
@@ -2554,48 +2667,60 @@ const Diagrama: React.FC = () => {
         connectionRouteStyle={connectionRouteStyle}
         onConnectionRouteStyleChange={setConnectionRouteStyle}
         cardColor={
-          selectedCards.size === 1
+          selectedCards.size >= 1
             ? cardMap.get(Array.from(selectedCards)[0])?.accent || '#2563EB'
-            : selectedCards.size === 0 && selectedConnections.size === 1
+            : selectedCards.size === 0 && selectedConnections.size >= 1
             ? connections.find((connection) => connection.id === Array.from(selectedConnections)[0])?.color || '#2563EB'
             : '#2563EB'
         }
         onCardColorChange={(color) => {
-          if (selectedCards.size === 1) {
-            const id = Array.from(selectedCards)[0];
-            const nextCards = cards.map((card) => (card.id === id ? { ...card, accent: color } : card));
-            setCards(nextCards);
-            saveToHistory(getDiagramState({ cards: nextCards }));
+          const hasCardSelection = selectedCards.size > 0;
+          const hasTextSelection = selectedTexts.size > 0;
+          const hasGroupSelection = selectedGroupBoxes.size > 0;
+          const hasConnectionSelection = selectedConnections.size > 0;
+
+          if (!hasCardSelection && !hasTextSelection && !hasGroupSelection && !hasConnectionSelection) {
             return;
           }
 
-          if (selectedTexts.size === 1) {
-            const id = Array.from(selectedTexts)[0];
-            const nextTexts = texts.map((item) => (item.id === id ? { ...item, accent: color } : item));
-            setTexts(nextTexts);
-            saveToHistory(getDiagramState({ texts: nextTexts }));
-            return;
-          }
+          const nextCards = hasCardSelection
+            ? cards.map((card) =>
+                selectedCards.has(card.id) ? { ...card, accent: color } : card
+              )
+            : cards;
 
-          if (selectedGroupBoxes.size === 1) {
-            const id = Array.from(selectedGroupBoxes)[0];
-            const nextGroupBoxes = groupBoxes.map((item) =>
-              item.id === id
-                ? { ...item, accent: color, background: `${color}1F` }
-                : item
-            );
-            setGroupBoxes(nextGroupBoxes);
-            saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
-            return;
-          }
+          const nextTexts = hasTextSelection
+            ? texts.map((item) =>
+                selectedTexts.has(item.id) ? { ...item, accent: color } : item
+              )
+            : texts;
 
-          if (selectedConnections.size > 0) {
-            const nextConnections = connections.map((connection) =>
-              selectedConnections.has(connection.id) ? { ...connection, color } : connection
-            );
-            setConnections(nextConnections);
-            saveToHistory(getDiagramState({ connections: nextConnections }));
-          }
+          const nextGroupBoxes = hasGroupSelection
+            ? groupBoxes.map((item) =>
+                selectedGroupBoxes.has(item.id)
+                  ? { ...item, accent: color, background: `${color}1F` }
+                  : item
+              )
+            : groupBoxes;
+
+          const nextConnections = hasConnectionSelection
+            ? connections.map((connection) =>
+                selectedConnections.has(connection.id) ? { ...connection, color } : connection
+              )
+            : connections;
+
+          setCards(nextCards);
+          setTexts(nextTexts);
+          setGroupBoxes(nextGroupBoxes);
+          setConnections(nextConnections);
+          saveToHistory(
+            getDiagramState({
+              cards: nextCards,
+              texts: nextTexts,
+              groupBoxes: nextGroupBoxes,
+              connections: nextConnections,
+            })
+          );
         }}
         showGrid={showGrid}
         onShowGridChange={setShowGrid}
@@ -2673,9 +2798,9 @@ const Diagrama: React.FC = () => {
         cancelConnection();
       }}
       >
-        <DiagramHeader
-          fileName={fileName}
-          onFileNameChange={setFileName}
+      <DiagramHeader
+        fileName={fileName}
+        onFileNameChange={setFileName}
           showSaveMenu={showSaveMenu}
           saveMenuRef={saveMenuRef}
           onToggleSaveMenu={() => setShowSaveMenu((value) => !value)}
@@ -2697,16 +2822,22 @@ const Diagrama: React.FC = () => {
           canRedo={canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          canEdit={
-            selectedCards.size === 1 ||
-            selectedTexts.size === 1 ||
-            selectedGroupBoxes.size === 1 ||
-            (selectedCards.size === 0 && selectedConnections.size === 1)
-          }
-          onEdit={openSelectedCardEditor}
-          canDelete={
-            selectedCards.size > 0 ||
-            selectedConnections.size > 0 ||
+        canEdit={
+          selectedCards.size === 1 ||
+          selectedTexts.size === 1 ||
+          selectedGroupBoxes.size === 1 ||
+          (selectedCards.size === 0 && selectedConnections.size === 1)
+        }
+        onEdit={openSelectedCardEditor}
+        canDuplicate={
+          selectedCards.size > 0 ||
+          selectedTexts.size > 0 ||
+          selectedGroupBoxes.size > 0
+        }
+        onDuplicate={duplicateSelection}
+        canDelete={
+          selectedCards.size > 0 ||
+          selectedConnections.size > 0 ||
             selectedTexts.size > 0 ||
             selectedGroupBoxes.size > 0
           }

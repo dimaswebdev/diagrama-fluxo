@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+  Copy,
   Clipboard,
   ChevronDown,
   FilePlus2,
@@ -29,6 +30,8 @@ interface DiagramHeaderProps {
   onRedo: () => void;
   canEdit: boolean;
   onEdit: () => void;
+  canDuplicate: boolean;
+  onDuplicate: () => void;
   canDelete: boolean;
   onDelete: () => void;
   cardsCount: number;
@@ -52,6 +55,8 @@ export default function DiagramHeader({
   onRedo,
   canEdit,
   onEdit,
+  canDuplicate,
+  onDuplicate,
   canDelete,
   onDelete,
   cardsCount,
@@ -173,6 +178,16 @@ export default function DiagramHeader({
             title="Editar selecionado"
           >
             Editar
+          </button>
+          <button
+            onClick={onDuplicate}
+            disabled={!canDuplicate}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+              canDuplicate ? 'ui-active-surface' : 'ui-disabled-surface'
+            }`}
+            title="Duplicar selecionado"
+          >
+            <Copy className="h-4.5 w-4.5" />
           </button>
           <button
             onClick={onDelete}

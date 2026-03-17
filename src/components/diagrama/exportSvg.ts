@@ -741,7 +741,7 @@ export function buildExportSvg(params: {
                    fill="none"
                    stroke="${stroke}"
                    stroke-width="${strokeWidth}"
-                   stroke-linecap="round"
+                   stroke-linecap="butt"
                    stroke-linejoin="round" />
                  <polygon points="${emphasisStrokeShape.arrowPolygon}" fill="${stroke}" />`
               : `<path d="${geometry.path}"
