@@ -390,7 +390,7 @@ const Diagrama: React.FC = () => {
     };
   }, []);
 
-  const getAllElementBounds = useCallback(() => {
+  const getPrimarySceneBounds = useCallback(() => {
     const elementBounds = [
       ...cards.map((card) => ({ x: card.x, y: card.y, width: card.width, height: card.height })),
       ...texts.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
@@ -401,16 +401,24 @@ const Diagrama: React.FC = () => {
       return null;
     }
 
-    const baseMinX = Math.min(...elementBounds.map((item) => item.x));
-    const baseMinY = Math.min(...elementBounds.map((item) => item.y));
-    const baseMaxX = Math.max(...elementBounds.map((item) => item.x + item.width));
-    const baseMaxY = Math.max(...elementBounds.map((item) => item.y + item.height));
-    const baseBounds = {
-      x: baseMinX,
-      y: baseMinY,
-      width: baseMaxX - baseMinX,
-      height: baseMaxY - baseMinY,
+    const minX = Math.min(...elementBounds.map((item) => item.x));
+    const minY = Math.min(...elementBounds.map((item) => item.y));
+    const maxX = Math.max(...elementBounds.map((item) => item.x + item.width));
+    const maxY = Math.max(...elementBounds.map((item) => item.y + item.height));
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
     };
+  }, [cards, groupBoxes, texts]);
+
+  const getAllElementBounds = useCallback(() => {
+    const baseBounds = getPrimarySceneBounds();
+    if (!baseBounds) {
+      return null;
+    }
 
     const connectionPadding = 32;
     const connectionBounds: Array<{ x: number; y: number; width: number; height: number }> = [];
@@ -484,7 +492,7 @@ const Diagrama: React.FC = () => {
     );
 
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-  }, [cardMap, cards, connections, groupBoxes, texts]);
+  }, [cardMap, connections, getPrimarySceneBounds, groupBoxes]);
 
   const applyViewportTransform = useCallback((nextScale: number, nextOffset: Point) => {
     scaleRef.current = nextScale;
@@ -499,9 +507,10 @@ const Diagrama: React.FC = () => {
   }, [applyViewportTransform, getViewportSize]);
 
   const fitSceneToViewport = useCallback(() => {
+    const primaryBounds = getPrimarySceneBounds();
     const allBounds = getAllElementBounds();
     const totalElementCount = cards.length + texts.length + groupBoxes.length;
-    if (!allBounds || totalElementCount === 0) return;
+    if (!primaryBounds || !allBounds || totalElementCount === 0) return;
     const viewport = getViewportSize();
 
     if (totalElementCount === 1) {
@@ -528,7 +537,24 @@ const Diagrama: React.FC = () => {
       }
     }
 
-    const fitProxyCard = [{
+    const primaryFitProxyCard = [{
+      id: '__fit-primary__',
+      x: primaryBounds.x,
+      y: primaryBounds.y,
+      width: primaryBounds.width,
+      height: primaryBounds.height,
+      sequence: 0,
+      title: '',
+      content: '',
+      label: '',
+      date: '',
+      source: '',
+      accent: '#000000',
+      textStyle: DEFAULT_CARD_TEXT_STYLE,
+      type: 'default' as const,
+    }];
+
+    const sceneFitProxyCard = [{
       id: '__fit__',
       x: allBounds.x,
       y: allBounds.y,
@@ -551,15 +577,30 @@ const Diagrama: React.FC = () => {
       clamp(baseMargin, groupBoxes.length > 0 ? 56 : 80, groupBoxes.length > 0 ? 104 : 140)
     );
 
-    const transform = getFitViewportTransform(fitProxyCard, viewport, {
+    const primaryTransform = getFitViewportTransform(primaryFitProxyCard, viewport, {
       margin: adaptiveMargin,
       minScale: ZOOM_MIN,
       maxScale: 1,
     });
+    const fullSceneTransform = getFitViewportTransform(sceneFitProxyCard, viewport, {
+      margin: adaptiveMargin,
+      minScale: ZOOM_MIN,
+      maxScale: 1,
+    });
+    const transform = !primaryTransform
+      ? fullSceneTransform
+      : !fullSceneTransform
+      ? primaryTransform
+      : {
+          scale: Math.min(primaryTransform.scale, Math.max(fullSceneTransform.scale, primaryTransform.scale * 0.88)),
+          offset: fullSceneTransform.scale < primaryTransform.scale * 0.88
+            ? fullSceneTransform.offset
+            : primaryTransform.offset,
+        };
     if (!transform) return;
 
     applyViewportTransform(transform.scale, transform.offset);
-  }, [applyViewportTransform, cards, centerCardInViewport, getAllElementBounds, getViewportSize, groupBoxes, texts]);
+  }, [applyViewportTransform, cards, centerCardInViewport, getAllElementBounds, getPrimarySceneBounds, getViewportSize, groupBoxes, texts]);
 
   const createCardAtPosition = useCallback((
     x: number,
