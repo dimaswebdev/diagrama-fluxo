@@ -174,7 +174,7 @@ export default function PrintDialog({
                 </label>
                 {!canSelection && (
                   <div className="mt-2 text-xs text-slate-400">
-                    Selecione ao menos um card para usar esta opção.
+                    Selecione ao menos um elemento para usar esta opção.
                   </div>
                 )}
               </div>

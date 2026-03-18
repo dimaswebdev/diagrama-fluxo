@@ -23,6 +23,9 @@ type UseDiagramExportParams = {
   fileName: string;
   printOptions: PrintOptions;
   selectedCardIds: Set<string>;
+  selectedConnectionIds: Set<string>;
+  selectedTextIds: Set<string>;
+  selectedGroupBoxIds: Set<string>;
 };
 
 export type ExportPreview = {
@@ -256,30 +259,44 @@ export function useDiagramExport({
   fileName,
   printOptions,
   selectedCardIds,
+  selectedConnectionIds,
+  selectedTextIds,
+  selectedGroupBoxIds,
 }: UseDiagramExportParams) {
   const [isPrinting, setIsPrinting] = useState(false);
 
   const getExportScene = useCallback(
     (opts: PrintOptions): ExportScene | null => {
-      const sourceCards = opts.selectionOnly
-        ? cards.filter((card) => selectedCardIds.has(card.id))
-        : cards;
+      if (!opts.selectionOnly) {
+        const bounds = getSceneBounds(cards, connections, texts, groupBoxes, opts.margin);
+        if (!bounds) return null;
 
+        return { cards, connections, texts, groupBoxes, bounds };
+      }
+
+      const selectedConnectionItems = connections.filter((connection) => selectedConnectionIds.has(connection.id));
+      const selectedCardIdSet = new Set(selectedCardIds);
+      selectedConnectionItems.forEach((connection) => {
+        selectedCardIdSet.add(connection.fromCard);
+        selectedCardIdSet.add(connection.toCard);
+      });
+
+      const sourceCards = cards.filter((card) => selectedCardIdSet.has(card.id));
       const sourceCardIds = new Set(sourceCards.map((card) => card.id));
       const sourceConnections = connections.filter(
         (connection) =>
-          sourceCardIds.has(connection.fromCard) &&
-          sourceCardIds.has(connection.toCard)
+          selectedConnectionIds.has(connection.id) ||
+          (sourceCardIds.has(connection.fromCard) && sourceCardIds.has(connection.toCard))
       );
-      const sourceTexts = opts.selectionOnly ? [] : texts;
-      const sourceGroupBoxes = opts.selectionOnly ? [] : groupBoxes;
+      const sourceTexts = texts.filter((item) => selectedTextIds.has(item.id));
+      const sourceGroupBoxes = groupBoxes.filter((item) => selectedGroupBoxIds.has(item.id));
 
       const bounds = getSceneBounds(sourceCards, sourceConnections, sourceTexts, sourceGroupBoxes, opts.margin);
       if (!bounds) return null;
 
       return { cards: sourceCards, connections: sourceConnections, texts: sourceTexts, groupBoxes: sourceGroupBoxes, bounds };
     },
-    [cards, connections, groupBoxes, selectedCardIds, texts]
+    [cards, connections, groupBoxes, selectedCardIds, selectedConnectionIds, selectedGroupBoxIds, selectedTextIds, texts]
   );
 
   const buildExportSvgForViewBox = useCallback(

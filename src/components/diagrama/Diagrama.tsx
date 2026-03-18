@@ -266,6 +266,9 @@ const Diagrama: React.FC = () => {
     fileName,
     printOptions,
     selectedCardIds: selectedCards,
+    selectedConnectionIds: selectedConnections,
+    selectedTextIds: selectedTexts,
+    selectedGroupBoxIds: selectedGroupBoxes,
   });
 
 
@@ -3806,7 +3809,12 @@ const Diagrama: React.FC = () => {
         onPrint={async () => {
           await printDocument(printOptions);
         }}
-        canSelection={selectedCards.size > 0}
+        canSelection={
+          selectedCards.size > 0 ||
+          selectedTexts.size > 0 ||
+          selectedGroupBoxes.size > 0 ||
+          selectedConnections.size > 0
+        }
         isPrinting={isPrinting}
       />
 
