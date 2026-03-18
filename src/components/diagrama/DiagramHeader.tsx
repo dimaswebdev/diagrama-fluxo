@@ -75,12 +75,12 @@ export default function DiagramHeader({
       <div
         className="pointer-events-auto flex items-center gap-3 self-start rounded-[12px] px-4 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
         style={{
-              backgroundColor: 'rgba(37, 99, 235, 0.10)',
-              color: 'rgba(11, 140, 166, 1)',
+          backgroundColor: 'rgba(37, 99, 235, 0.10)',
+          color: 'rgba(11, 140, 166, 1)',
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl   text-[#2563EB] shadow-[0_4px_12px_rgba(14,165,233,0.10)]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl text-[#2563EB] shadow-[0_4px_12px_rgba(14,165,233,0.10)]">
           <Clipboard className="h-10 w-10" />
         </div>
         <div className="min-w-0">
@@ -122,7 +122,7 @@ export default function DiagramHeader({
               <ChevronDown className="h-4 w-4" />
             </button>
             {showSaveMenu && (
-              <div className="absolute right-0 top-12 min-w-[180px] rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-[0_10px_24px_rgba(15,23,42,0.07)] ">
+              <div className="absolute right-0 top-12 min-w-[180px] rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-[0_10px_24px_rgba(15,23,42,0.07)]">
                 <button
                   onClick={onSavePng}
                   className="ui-hover-surface block w-full rounded-xl px-3 py-2 text-left text-sm"

@@ -1,14 +1,13 @@
 ﻿'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import PrintDialog, { PrintOptions } from './PrintDialog';
-import Card, { type ResizeDirection } from './Card';
+import PrintDialog from './PrintDialog';
+import Card from './Card';
 import CanvasText from './CanvasText';
 import ConnectionLine from './ConnectionLine';
 import GroupBox from './GroupBox';
 import PropertiesPanel from './PropertiesPanel';
 import {
-  doesConnectionIntersectSelectionBox,
   getConnectionGeometry,
   getClosestSideForPoint,
   getPreviewConnectionGeometry,
@@ -18,19 +17,18 @@ import {
 import SelectionBox from './SelectionBox';
 import FloatingToolbar from './FloatingToolbar';
 import DiagramHeader from './DiagramHeader';
-import { EditCardDialog } from './EditCardDialog';
-import ConnectionEditDialog from './ConnectionEditDialog';
 import { getCardPreset } from './cardPresets';
-import {
-  getCenteredViewportTransform,
-  getFitViewportTransform,
-} from './viewport';
+import { estimateTextHeight } from './textSizing';
 
 import { useLocalStorage } from '@/hooks/diagrama/useLocalStorage';
-import { useDiagramExport } from '@/hooks/diagrama/useDiagramExport';
 import { useHistory } from '@/hooks/diagrama/useHistory';
-import {
-} from 'lucide-react';
+import { useDiagramViewport } from '@/hooks/diagrama/useDiagramViewport';
+import { useDiagramSelectionTransform } from '@/hooks/diagrama/useDiagramSelectionTransform';
+import { useDiagramArrangement } from '@/hooks/diagrama/useDiagramArrangement';
+import { useDiagramKeyboardShortcuts } from '@/hooks/diagrama/useDiagramKeyboardShortcuts';
+import { useDiagramEditors } from '@/hooks/diagrama/useDiagramEditors';
+import { useDiagramOutput } from '@/hooks/diagrama/useDiagramOutput';
+import { useDiagramCanvasSelection } from '@/hooks/diagrama/useDiagramCanvasSelection';
 
 import {
   Card as CardType,
@@ -41,24 +39,11 @@ import {
   DiagramText,
   GroupBox as GroupBoxType,
   Point,
-  SelectionBox as SelectionBoxType,
   ConnectionType,
   ConnectionVariant,
   CardType as CardTypeEnum,
   GRID_SIZE,
-  A4_WIDTH,
-  A4_HEIGHT,
 } from '@/types/diagrama';
-
-type ConnectionStart = { cardId: string; point: Point; side: ConnectionSide } | null;
-type InlineCardDraft = {
-  title: string;
-  date: string;
-  content: string;
-  label: string;
-};
-type EditingTextDraft = string;
-type EditingGroupDraft = string;
 
 const CARD_COLORS = [
   '#2563EB',
@@ -126,25 +111,6 @@ const getTextLayer = (item: DiagramText) => item.layer ?? DEFAULT_TEXT_LAYER;
 const getGroupLayer = (item: GroupBoxType) => item.layer ?? DEFAULT_GROUP_LAYER;
 const createUniqueId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-const estimateTextHeight = (
-  text: string,
-  width: number,
-  fontSize: number,
-  lineHeight = 1.15
-) => {
-  const safeWidth = Math.max(TEXT_MIN_WIDTH, width);
-  const charsPerLine = Math.max(10, Math.floor((safeWidth - 24) / (fontSize * 0.58)));
-  const paragraphs = (text || '').split('\n');
-  let lineCount = 0;
-
-  for (const paragraph of paragraphs) {
-    const safeParagraph = paragraph.trim().length > 0 ? paragraph : ' ';
-    lineCount += Math.max(1, Math.ceil(safeParagraph.length / charsPerLine));
-  }
-
-  return Math.max(TEXT_MIN_HEIGHT, Math.ceil(lineCount * fontSize * lineHeight + 24));
-};
-
 const hexToRgba = (hex: string, alpha: number) => {
   const normalized = hex.replace('#', '');
   const value = normalized.length === 3
@@ -180,96 +146,19 @@ const Diagrama: React.FC = () => {
   const [selectedGroupBoxes, setSelectedGroupBoxes] = useState<Set<string>>(new Set());
 
   // InteraÃ§Ãµes (drag / pan / connect)
-  const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [dragStart, setDragStart] = useState<Point>({ x: 0, y: 0 });
-  const [dragEnd, setDragEnd] = useState<Point>({ x: 0, y: 0 });
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
-
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [connectionStart, setConnectionStart] = useState<ConnectionStart>(null);
-  const [tempConnectionEnd, setTempConnectionEnd] = useState<Point | null>(null);
   const [connectionType, setConnectionType] = useState<ConnectionType>('normal');
   const [connectionRouteStyle, setConnectionRouteStyle] = useState<ConnectionRouteStyle>('bezier');
   const [connectionColor, setConnectionColor] = useState<string>('#2563eb');
-
-  // Mundo virtual (zoom/pan)
-  const [scale, setScale] = useState<number>(1);
-  const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
-
-  // Drag de cards
-  const [isDraggingCard, setIsDraggingCard] = useState(false);
-  const [draggedCards, setDraggedCards] = useState<Map<string, { startX: number; startY: number }>>(new Map());
-  const [isDraggingText, setIsDraggingText] = useState(false);
-  const [draggedTexts, setDraggedTexts] = useState<Map<string, { startX: number; startY: number }>>(new Map());
-  const [isDraggingGroupBox, setIsDraggingGroupBox] = useState(false);
-  const [draggedGroupBoxes, setDraggedGroupBoxes] = useState<Map<string, { startX: number; startY: number }>>(new Map());
-  const [isResizingCard, setIsResizingCard] = useState(false);
-  const [resizeSession, setResizeSession] = useState<{
-    id: string;
-    direction: ResizeDirection;
-    startMouse: Point;
-    startCard: { x: number; y: number; width: number; height: number };
-  } | null>(null);
-  const [isResizingText, setIsResizingText] = useState(false);
-  const [textResizeSession, setTextResizeSession] = useState<{
-    id: string;
-    direction: ResizeDirection;
-    startMouse: Point;
-    startItem: { x: number; y: number; width: number; height: number };
-  } | null>(null);
-  const [isResizingGroupBox, setIsResizingGroupBox] = useState(false);
-  const [groupResizeSession, setGroupResizeSession] = useState<{
-    id: string;
-    direction: ResizeDirection;
-    startMouse: Point;
-    startItem: { x: number; y: number; width: number; height: number };
-  } | null>(null);
 
   // UI
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [isMiddleZooming, setIsMiddleZooming] = useState(false);
   const [isCanvasMoveActive, setIsCanvasMoveActive] = useState(false);
-  const [editingCard, setEditingCard] = useState<CardType | null>(null);
-  const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
-  const [editingInlineCardId, setEditingInlineCardId] = useState<string | null>(null);
-  const [inlineDraft, setInlineDraft] = useState<InlineCardDraft | null>(null);
-  const [inlineEditorHeight, setInlineEditorHeight] = useState(318);
-  const [editingTextId, setEditingTextId] = useState<string | null>(null);
-  const [editingTextDraft, setEditingTextDraft] = useState<EditingTextDraft>('');
-  const [editingGroupBoxId, setEditingGroupBoxId] = useState<string | null>(null);
-  const [editingGroupDraft, setEditingGroupDraft] = useState<EditingGroupDraft>('');
 
-  //Estado de impressÃ£o
-  const [showPrintDialog, setShowPrintDialog] = useState(false);
-  const [showSaveMenu, setShowSaveMenu] = useState(false);
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-
-  const [printOptions, setPrintOptions] = useState<PrintOptions>({
-    selectionOnly: false,
-    mode: 'fit',
-    pagesX: 1,
-    pagesY: 1,
-    margin: 60,
-    exportZoom: 1,
-    includeGrid: true,
-    includeShadows: true,
-    orientation: 'auto', 
-  });
-
-  const { isPrinting, printPreview, saveAsSvg, saveAsPng, saveAsPdf, generatePdf, printDocument } = useDiagramExport({
-    cards,
-    connections,
-    texts,
-    groupBoxes,
-    fileName,
-    printOptions,
-    selectedCardIds: selectedCards,
-    selectedConnectionIds: selectedConnections,
-    selectedTextIds: selectedTexts,
-    selectedGroupBoxIds: selectedGroupBoxes,
-  });
 
 
 
@@ -278,64 +167,15 @@ const Diagrama: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const inlineEditorRef = useRef<HTMLDivElement>(null);
-  const saveMenuRef = useRef<HTMLDivElement>(null);
-  const didDragCardsRef = useRef(false);
   const suppressCardClickRef = useRef(false);
   const hasInitializedViewportRef = useRef(false);
   const spacePanPressedRef = useRef(false);
-  const dragStartRef = useRef(dragStart);
-  const draggedCardsRef = useRef(draggedCards);
-  const draggedTextsRef = useRef(draggedTexts);
-  const draggedGroupBoxesRef = useRef(draggedGroupBoxes);
+  const dragStartRef = useRef<Point>({ x: 0, y: 0 });
   const snapToGridRef = useRef(snapToGrid);
-  const pendingDragWorldRef = useRef<Point | null>(null);
-  const dragFrameRef = useRef<number | null>(null);
 
-  // Refs (para listener wheel nÃ£o depender de deps e nÃ£o recriar)
-  const scaleRef = useRef(scale);
-  const offsetRef = useRef(offset);
-  useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
-  useEffect(() => {
-    offsetRef.current = offset;
-  }, [offset]);
-  useEffect(() => {
-    dragStartRef.current = dragStart;
-  }, [dragStart]);
-  useEffect(() => {
-    draggedCardsRef.current = draggedCards;
-  }, [draggedCards]);
-  useEffect(() => {
-    draggedTextsRef.current = draggedTexts;
-  }, [draggedTexts]);
-  useEffect(() => {
-    draggedGroupBoxesRef.current = draggedGroupBoxes;
-  }, [draggedGroupBoxes]);
   useEffect(() => {
     snapToGridRef.current = snapToGrid;
   }, [snapToGrid]);
-  useEffect(
-    () => () => {
-      if (dragFrameRef.current !== null) {
-        window.cancelAnimationFrame(dragFrameRef.current);
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!showSaveMenu) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (saveMenuRef.current && !saveMenuRef.current.contains(event.target as Node)) {
-        setShowSaveMenu(false);
-      }
-    };
-
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [showSaveMenu]);
 
   // History
   const { canUndo, canRedo, pushState, undo, redo } = useHistory({ cards, connections, texts, groupBoxes });
@@ -346,6 +186,59 @@ const Diagrama: React.FC = () => {
     for (const c of cards) m.set(c.id, c);
     return m;
   }, [cards]);
+
+  const {
+    isDragging,
+    setIsDragging,
+    dragStart,
+    setDragStart,
+    dragEnd,
+    setDragEnd,
+    isConnecting,
+    connectionStart,
+    tempConnectionEnd,
+    setTempConnectionEnd,
+    findCardAtPosition,
+    getSelectionBox,
+    isCardInSelection,
+    isBoxInSelection,
+    isConnectionInSelection,
+    cancelConnection,
+    handleConnectionStart,
+  } = useDiagramCanvasSelection({
+    cards,
+    texts,
+    groupBoxes,
+    connections,
+    cardMap,
+  });
+
+  useEffect(() => {
+    dragStartRef.current = dragStart;
+  }, [dragStart]);
+
+  const {
+    scale,
+    setScale,
+    scaleRef,
+    offset,
+    setOffset,
+    offsetRef,
+    getViewportCenterWorld,
+    applyViewportTransform,
+    fitSceneToViewport,
+    handleZoomReset,
+  } = useDiagramViewport({
+    containerRef,
+    cards,
+    texts,
+    groupBoxes,
+    connections,
+    cardMap,
+    zoomMin: ZOOM_MIN,
+    viewportMargin: VIEWPORT_MARGIN,
+    proxyTextStyle: DEFAULT_CARD_TEXT_STYLE,
+  });
 
   // Helper: salva snapshot atual no histÃ³rico
   const getDiagramState = useCallback(
@@ -369,238 +262,6 @@ const Diagrama: React.FC = () => {
     setTexts(state.texts ?? []);
     setGroupBoxes(state.groupBoxes ?? []);
   }, [setCards, setConnections, setTexts, setGroupBoxes]);
-
-  const getViewportCenterWorld = useCallback(
-    (nextScale = scaleRef.current, nextOffset = offsetRef.current) => {
-      const width = containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH;
-      const height = containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT;
-
-      return {
-        x: (-nextOffset.x / nextScale) + width / (2 * nextScale),
-        y: (-nextOffset.y / nextScale) + height / (2 * nextScale),
-      };
-    },
-    []
-  );
-
-  const getViewportSize = useCallback(() => {
-    return {
-      width: containerRef.current?.clientWidth || window.innerWidth || A4_WIDTH,
-      height: containerRef.current?.clientHeight || window.innerHeight || A4_HEIGHT,
-    };
-  }, []);
-
-  const getPrimarySceneBounds = useCallback(() => {
-    const elementBounds = [
-      ...cards.map((card) => ({ x: card.x, y: card.y, width: card.width, height: card.height })),
-      ...texts.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
-      ...groupBoxes.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
-    ];
-
-    if (!elementBounds.length) {
-      return null;
-    }
-
-    const minX = Math.min(...elementBounds.map((item) => item.x));
-    const minY = Math.min(...elementBounds.map((item) => item.y));
-    const maxX = Math.max(...elementBounds.map((item) => item.x + item.width));
-    const maxY = Math.max(...elementBounds.map((item) => item.y + item.height));
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  }, [cards, groupBoxes, texts]);
-
-  const getAllElementBounds = useCallback(() => {
-    const baseBounds = getPrimarySceneBounds();
-    if (!baseBounds) {
-      return null;
-    }
-
-    const connectionPadding = 32;
-    const connectionBounds: Array<{ x: number; y: number; width: number; height: number }> = [];
-
-    for (const connection of connections) {
-      const fromCard = cardMap.get(connection.fromCard);
-      const toCard = cardMap.get(connection.toCard);
-      if (!fromCard || !toCard) continue;
-
-      const geometry = getConnectionGeometry(
-        fromCard,
-        toCard,
-        {
-          fromSide: connection.fromSide,
-          toSide: connection.toSide,
-        },
-        connection.routeStyle ?? 'bezier'
-      );
-
-      const points =
-        connection.routeStyle === 'orthogonal' && 'points' in geometry
-          ? geometry.points
-          : 'controlPoint1' in geometry && 'controlPoint2' in geometry
-          ? [
-              geometry.startPoint,
-              geometry.controlPoint1,
-              geometry.controlPoint2,
-              geometry.endPoint,
-            ]
-          : [geometry.startPoint, geometry.endPoint];
-
-      points.push(geometry.labelPoint);
-
-      const minX = Math.min(...points.map((point) => point.x)) - connectionPadding;
-      const minY = Math.min(...points.map((point) => point.y)) - connectionPadding;
-      const maxX = Math.max(...points.map((point) => point.x)) + connectionPadding;
-      const maxY = Math.max(...points.map((point) => point.y)) + connectionPadding;
-
-      connectionBounds.push({
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-      });
-    }
-
-    if (!connectionBounds.length) {
-      return baseBounds;
-    }
-
-    const connectionMinX = Math.min(...connectionBounds.map((item) => item.x));
-    const connectionMinY = Math.min(...connectionBounds.map((item) => item.y));
-    const connectionMaxX = Math.max(...connectionBounds.map((item) => item.x + item.width));
-    const connectionMaxY = Math.max(...connectionBounds.map((item) => item.y + item.height));
-
-    const hasStructuralGroups = groupBoxes.length > 0;
-    const overflowRatio = hasStructuralGroups ? 0.18 : 0.28;
-    const overflowCap = hasStructuralGroups ? 160 : 220;
-    const maxOverflowX = Math.min(baseBounds.width * overflowRatio, overflowCap);
-    const maxOverflowY = Math.min(baseBounds.height * overflowRatio, overflowCap);
-
-    const minX = Math.min(baseBounds.x, Math.max(connectionMinX, baseBounds.x - maxOverflowX));
-    const minY = Math.min(baseBounds.y, Math.max(connectionMinY, baseBounds.y - maxOverflowY));
-    const maxX = Math.max(
-      baseBounds.x + baseBounds.width,
-      Math.min(connectionMaxX, baseBounds.x + baseBounds.width + maxOverflowX)
-    );
-    const maxY = Math.max(
-      baseBounds.y + baseBounds.height,
-      Math.min(connectionMaxY, baseBounds.y + baseBounds.height + maxOverflowY)
-    );
-
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-  }, [cardMap, connections, getPrimarySceneBounds, groupBoxes]);
-
-  const applyViewportTransform = useCallback((nextScale: number, nextOffset: Point) => {
-    scaleRef.current = nextScale;
-    offsetRef.current = nextOffset;
-    setScale(nextScale);
-    setOffset(nextOffset);
-  }, []);
-
-  const centerCardInViewport = useCallback((card: CardType, targetScale = 1) => {
-    const transform = getCenteredViewportTransform(card, getViewportSize(), targetScale);
-    applyViewportTransform(transform.scale, transform.offset);
-  }, [applyViewportTransform, getViewportSize]);
-
-  const fitSceneToViewport = useCallback(() => {
-    const primaryBounds = getPrimarySceneBounds();
-    const allBounds = getAllElementBounds();
-    const totalElementCount = cards.length + texts.length + groupBoxes.length;
-    if (!primaryBounds || !allBounds || totalElementCount === 0) return;
-    const viewport = getViewportSize();
-
-    if (totalElementCount === 1) {
-      if (cards.length === 1) {
-        centerCardInViewport(cards[0], 1);
-        return;
-      }
-
-      const singleBounds =
-        texts.length === 1
-          ? texts[0]
-          : groupBoxes.length === 1
-          ? groupBoxes[0]
-          : null;
-
-      if (singleBounds) {
-        const centerX = singleBounds.x + singleBounds.width / 2;
-        const centerY = singleBounds.y + singleBounds.height / 2;
-        applyViewportTransform(1, {
-          x: viewport.width / 2 - centerX,
-          y: viewport.height / 2 - centerY,
-        });
-        return;
-      }
-    }
-
-    const primaryFitProxyCard = [{
-      id: '__fit-primary__',
-      x: primaryBounds.x,
-      y: primaryBounds.y,
-      width: primaryBounds.width,
-      height: primaryBounds.height,
-      sequence: 0,
-      title: '',
-      content: '',
-      label: '',
-      date: '',
-      source: '',
-      accent: '#000000',
-      textStyle: DEFAULT_CARD_TEXT_STYLE,
-      type: 'default' as const,
-    }];
-
-    const sceneFitProxyCard = [{
-      id: '__fit__',
-      x: allBounds.x,
-      y: allBounds.y,
-      width: allBounds.width,
-      height: allBounds.height,
-      sequence: 0,
-      title: '',
-      content: '',
-      label: '',
-      date: '',
-      source: '',
-      accent: '#000000',
-      textStyle: DEFAULT_CARD_TEXT_STYLE,
-      type: 'default' as const,
-    }];
-
-    const viewportMinSide = Math.min(viewport.width, viewport.height);
-    const baseMargin = groupBoxes.length > 0 ? viewportMinSide * 0.08 : VIEWPORT_MARGIN;
-    const adaptiveMargin = Math.round(
-      clamp(baseMargin, groupBoxes.length > 0 ? 56 : 80, groupBoxes.length > 0 ? 104 : 140)
-    );
-
-    const primaryTransform = getFitViewportTransform(primaryFitProxyCard, viewport, {
-      margin: adaptiveMargin,
-      minScale: ZOOM_MIN,
-      maxScale: 1,
-    });
-    const fullSceneTransform = getFitViewportTransform(sceneFitProxyCard, viewport, {
-      margin: adaptiveMargin,
-      minScale: ZOOM_MIN,
-      maxScale: 1,
-    });
-    const transform = !primaryTransform
-      ? fullSceneTransform
-      : !fullSceneTransform
-      ? primaryTransform
-      : {
-          scale: Math.min(primaryTransform.scale, Math.max(fullSceneTransform.scale, primaryTransform.scale * 0.88)),
-          offset: fullSceneTransform.scale < primaryTransform.scale * 0.88
-            ? fullSceneTransform.offset
-            : primaryTransform.offset,
-        };
-    if (!transform) return;
-
-    applyViewportTransform(transform.scale, transform.offset);
-  }, [applyViewportTransform, cards, centerCardInViewport, getAllElementBounds, getPrimarySceneBounds, getViewportSize, groupBoxes, texts]);
 
   const createCardAtPosition = useCallback((
     x: number,
@@ -672,107 +333,181 @@ const Diagrama: React.FC = () => {
       accent,
       type,
     });
-  }, [createCardAtPosition, getViewportCenterWorld]);
+  }, [createCardAtPosition, getViewportCenterWorld, offsetRef, scaleRef]);
 
-  const getExpandedSelectionIds = useCallback(
-    (seed: {
-      cards?: Iterable<string>;
-      texts?: Iterable<string>;
-      groupBoxes?: Iterable<string>;
-    }) => {
-      const cardIds = new Set(seed.cards ?? []);
-      const textIds = new Set(seed.texts ?? []);
-      const groupBoxIds = new Set(seed.groupBoxes ?? []);
-      const groupIds = new Set<string>();
+  const screenToWorld = useCallback(
+    (clientX: number, clientY: number): Point | null => {
+      const rect = diagramRef.current?.getBoundingClientRect();
+      if (!rect) return null;
 
-      for (const card of cards) {
-        if (cardIds.has(card.id) && card.groupId) groupIds.add(card.groupId);
-      }
-      for (const item of texts) {
-        if (textIds.has(item.id) && item.groupId) groupIds.add(item.groupId);
-      }
-      for (const item of groupBoxes) {
-        if (groupBoxIds.has(item.id) && item.groupId) groupIds.add(item.groupId);
-      }
-
-      if (groupIds.size > 0) {
-        for (const card of cards) {
-          if (card.groupId && groupIds.has(card.groupId)) cardIds.add(card.id);
-        }
-        for (const item of texts) {
-          if (item.groupId && groupIds.has(item.groupId)) textIds.add(item.id);
-        }
-        for (const item of groupBoxes) {
-          if (item.groupId && groupIds.has(item.groupId)) groupBoxIds.add(item.id);
-        }
-      }
-
-      return { cardIds, textIds, groupBoxIds };
+      const worldX = (clientX - rect.left - offsetRef.current.x) / scaleRef.current;
+      const worldY = (clientY - rect.top - offsetRef.current.y) / scaleRef.current;
+      return { x: worldX, y: worldY };
     },
-    [cards, groupBoxes, texts]
+    [offsetRef, scaleRef]
   );
 
-  const beginExpandedSelectionDrag = useCallback(
-    (
-      seed:
-        | { cards: Set<string>; texts: Set<string>; groupBoxes: Set<string> }
-        | { cards?: Set<string>; texts?: Set<string>; groupBoxes?: Set<string> },
-      world: Point
-    ) => {
-      const expanded = getExpandedSelectionIds({
-        cards: seed.cards ?? new Set<string>(),
-        texts: seed.texts ?? new Set<string>(),
-        groupBoxes: seed.groupBoxes ?? new Set<string>(),
-      });
+  const {
+    getExpandedSelectionIds,
+    propertiesSelection,
+    applyLayerChangeFromPanel,
+    groupSelectedElements,
+    ungroupSelectedElements,
+    alignSelectedElements,
+    distributeSelectedElements,
+  } = useDiagramArrangement({
+    cards,
+    texts,
+    groupBoxes,
+    connections,
+    selectedCards,
+    selectedTexts,
+    selectedGroupBoxes,
+    selectedConnections,
+    snapToGrid,
+    gridSize: GRID_SIZE,
+    defaultConnectionLayer: DEFAULT_CONNECTION_LAYER,
+    defaultCardLayer: DEFAULT_CARD_LAYER,
+    defaultGroupLayer: DEFAULT_GROUP_LAYER,
+    layerStep: LAYER_STEP,
+    getCardLayer,
+    getTextLayer,
+    getGroupLayer,
+    createUniqueId,
+    getDiagramState,
+    saveToHistory,
+    setCards,
+    setTexts,
+    setGroupBoxes,
+  });
 
-      setSelectedCards(expanded.cardIds);
-      setSelectedTexts(expanded.textIds);
-      setSelectedGroupBoxes(expanded.groupBoxIds);
-      setSelectedConnections(new Set());
+  const {
+    isDraggingCard,
+    isDraggingText,
+    isDraggingGroupBox,
+    isResizingCard,
+    isResizingText,
+    isResizingGroupBox,
+    resizeSession,
+    textResizeSession,
+    groupResizeSession,
+    didDragCardsRef,
+    flushDraggedCards,
+    scheduleDraggedCards,
+    resizeCard,
+    moveDraggedTexts,
+    moveDraggedGroupBoxes,
+    resizeBox,
+    handleCardDragStart,
+    handleCardResizeStart,
+    handleTextDragStart,
+    handleTextResizeStart,
+    handleGroupBoxDragStart,
+    handleGroupBoxResizeStart,
+    setIsResizingCard,
+    setResizeSession,
+    setIsResizingText,
+    setTextResizeSession,
+    setIsResizingGroupBox,
+    setGroupResizeSession,
+    resetDragState,
+  } = useDiagramSelectionTransform({
+    cardMap,
+    texts,
+    groupBoxes,
+    gridSize: GRID_SIZE,
+    cardMinWidth: CARD_MIN_WIDTH,
+    cardMinHeight: CARD_MIN_HEIGHT,
+    textMinWidth: TEXT_MIN_WIDTH,
+    textMinHeight: TEXT_MIN_HEIGHT,
+    groupMinWidth: GROUP_MIN_WIDTH,
+    groupMinHeight: GROUP_MIN_HEIGHT,
+    snapToGrid,
+    getExpandedSelectionIds,
+    screenToWorld,
+    selectedCards,
+    selectedTexts,
+    selectedGroupBoxes,
+    setSelectedCards,
+    setSelectedConnections,
+    setSelectedTexts,
+    setSelectedGroupBoxes,
+    setDragStart,
+    setCards,
+    setTexts,
+    setGroupBoxes,
+  });
 
-      setDragStart(world);
-      didDragCardsRef.current = false;
+  const {
+    editingInlineCard,
+    editingInlineCardId,
+    inlineDraft,
+    setInlineDraft,
+    inlineEditorHeight,
+    editingTextId,
+    editingTextDraft,
+    setEditingTextDraft,
+    editingGroupBoxId,
+    editingGroupDraft,
+    setEditingGroupDraft,
+    openInlineEditor,
+    cancelInlineEditor,
+    openTextEditor,
+    cancelTextEditor,
+    applyTextEditor,
+    openGroupEditor,
+    cancelGroupEditor,
+    applyGroupEditor,
+    commitActiveLooseEditors,
+    applyInlineEditor,
+    openSelectedCardEditor,
+  } = useDiagramEditors({
+    cards,
+    texts,
+    groupBoxes,
+    selectedCards,
+    selectedTexts,
+    selectedGroupBoxes,
+    cardMap,
+    getDiagramState,
+    saveToHistory,
+    setCards,
+    setTexts,
+    setGroupBoxes,
+    setSelectedCards,
+    setSelectedConnections,
+    setSelectedTexts,
+    setSelectedGroupBoxes,
+    inlineEditorRef,
+  });
 
-      const nextDraggedCards = new Map<string, { startX: number; startY: number }>();
-      expanded.cardIds.forEach((cardId) => {
-        const card = cardMap.get(cardId);
-        if (!card) return;
-        nextDraggedCards.set(cardId, { startX: card.x, startY: card.y });
-      });
-      setDraggedCards(nextDraggedCards);
-
-      const nextDraggedTexts = new Map<string, { startX: number; startY: number }>();
-      expanded.textIds.forEach((textId) => {
-        const item = texts.find((text) => text.id === textId);
-        if (!item) return;
-        nextDraggedTexts.set(textId, { startX: item.x, startY: item.y });
-      });
-      setDraggedTexts(nextDraggedTexts);
-
-      const nextDraggedGroupBoxes = new Map<string, { startX: number; startY: number }>();
-      expanded.groupBoxIds.forEach((groupBoxId) => {
-        const item = groupBoxes.find((groupBox) => groupBox.id === groupBoxId);
-        if (!item) return;
-        nextDraggedGroupBoxes.set(groupBoxId, { startX: item.x, startY: item.y });
-      });
-      setDraggedGroupBoxes(nextDraggedGroupBoxes);
-
-      if (expanded.cardIds.size > 0) setIsDraggingCard(true);
-      if (expanded.textIds.size > 0) setIsDraggingText(true);
-      if (expanded.groupBoxIds.size > 0) setIsDraggingGroupBox(true);
-    },
-    [cardMap, getExpandedSelectionIds, groupBoxes, texts]
-  );
-
-  const editingConnection = useMemo(
-    () => connections.find((connection) => connection.id === editingConnectionId) ?? null,
-    [connections, editingConnectionId]
-  );
-
-  const editingInlineCard = useMemo(
-    () => cards.find((card) => card.id === editingInlineCardId) ?? null,
-    [cards, editingInlineCardId]
-  );
+  const {
+    showPrintDialog,
+    showSaveMenu,
+    printOptions,
+    setPrintOptions,
+    saveMenuRef,
+    isPrinting,
+    printPreview,
+    openPrintDialog,
+    closePrintDialog,
+    toggleSaveMenu,
+    handleSavePng,
+    handleSaveSvg,
+    handleSavePdf,
+    handleConfirmPdf,
+    handlePrint,
+  } = useDiagramOutput({
+    cards,
+    connections,
+    texts,
+    groupBoxes,
+    fileName,
+    selectedCardIds: selectedCards,
+    selectedConnectionIds: selectedConnections,
+    selectedTextIds: selectedTexts,
+    selectedGroupBoxIds: selectedGroupBoxes,
+  });
 
   const applyTypographySize = useCallback(
     (fontSize: number) => {
@@ -890,87 +625,6 @@ const Diagrama: React.FC = () => {
       }
     },
     [cards, getDiagramState, groupBoxes, saveToHistory, selectedCards, selectedGroupBoxes, selectedTexts, setCards, setGroupBoxes, setTexts, texts]
-  );
-
-  const propertiesSelection = useMemo(() => {
-    const multiSelectableCount = selectedCards.size + selectedTexts.size + selectedGroupBoxes.size;
-
-    if (multiSelectableCount >= 2) {
-      return { kind: 'multi' as const, item: { id: 'multi-selection', count: multiSelectableCount } };
-    }
-
-    if (selectedCards.size === 1) {
-      const item = cards.find((card) => card.id === Array.from(selectedCards)[0]);
-      return item ? { kind: 'card' as const, item } : null;
-    }
-
-    if (selectedTexts.size === 1) {
-      const item = texts.find((text) => text.id === Array.from(selectedTexts)[0]);
-      return item ? { kind: 'text' as const, item } : null;
-    }
-
-    if (selectedGroupBoxes.size === 1) {
-      const item = groupBoxes.find((groupBox) => groupBox.id === Array.from(selectedGroupBoxes)[0]);
-      return item ? { kind: 'group' as const, item } : null;
-    }
-
-    if (selectedConnections.size === 1) {
-      const item = connections.find((connection) => connection.id === Array.from(selectedConnections)[0]);
-      return item ? { kind: 'connection' as const, item } : null;
-    }
-
-    return null;
-  }, [cards, connections, groupBoxes, selectedCards, selectedConnections, selectedGroupBoxes, selectedTexts, texts]);
-
-  const applyLayerChangeFromPanel = useCallback(
-    (direction: 'front' | 'forward' | 'backward' | 'back') => {
-      if (!propertiesSelection || propertiesSelection.kind === 'connection') return;
-      const allLayers = [
-        DEFAULT_CONNECTION_LAYER,
-        ...cards.map((card) => getCardLayer(card)),
-        ...texts.map((item) => getTextLayer(item)),
-        ...groupBoxes.map((item) => getGroupLayer(item)),
-      ];
-      const maxLayer = allLayers.length > 0 ? Math.max(...allLayers) : DEFAULT_CARD_LAYER;
-      const minLayer = allLayers.length > 0 ? Math.min(...allLayers) : DEFAULT_GROUP_LAYER;
-
-      const getNextLayer = (current: number) => {
-        if (direction === 'front') return maxLayer + LAYER_STEP;
-        if (direction === 'back') return minLayer - LAYER_STEP;
-        return current + (direction === 'forward' ? LAYER_STEP : -LAYER_STEP);
-      };
-
-      if (propertiesSelection.kind === 'card') {
-        const nextCards = cards.map((card) =>
-          card.id === propertiesSelection.item.id
-            ? { ...card, layer: getNextLayer(getCardLayer(card)) }
-            : card
-        );
-        setCards(nextCards);
-        saveToHistory(getDiagramState({ cards: nextCards }));
-        return;
-      }
-
-      if (propertiesSelection.kind === 'text') {
-        const nextTexts = texts.map((item) =>
-          item.id === propertiesSelection.item.id
-            ? { ...item, layer: getNextLayer(getTextLayer(item)) }
-            : item
-        );
-        setTexts(nextTexts);
-        saveToHistory(getDiagramState({ texts: nextTexts }));
-        return;
-      }
-
-      const nextGroupBoxes = groupBoxes.map((item) =>
-        item.id === propertiesSelection.item.id
-          ? { ...item, layer: getNextLayer(getGroupLayer(item)) }
-          : item
-      );
-      setGroupBoxes(nextGroupBoxes);
-      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
-    },
-    [cards, getDiagramState, groupBoxes, propertiesSelection, saveToHistory, setCards, setGroupBoxes, setTexts, texts]
   );
 
   const canvasElements = useMemo(() => {
@@ -1243,222 +897,6 @@ const Diagrama: React.FC = () => {
     [connections, getDiagramState, propertiesSelection, saveToHistory, setConnections]
   );
 
-  const openInlineEditor = useCallback((card: CardType) => {
-    setSelectedCards(new Set([card.id]));
-    setSelectedConnections(new Set());
-    setSelectedTexts(new Set());
-    setSelectedGroupBoxes(new Set());
-    setEditingInlineCardId(card.id);
-    setInlineDraft({
-      title: card.title,
-      date: card.date,
-      content: card.content,
-      label: card.label,
-    });
-  }, []);
-
-  const cancelInlineEditor = useCallback(() => {
-    setEditingInlineCardId(null);
-    setInlineDraft(null);
-  }, []);
-
-  const openTextEditor = useCallback((item: DiagramText) => {
-    setSelectedTexts(new Set([item.id]));
-    setSelectedCards(new Set());
-    setSelectedConnections(new Set());
-    setSelectedGroupBoxes(new Set());
-    setEditingTextId(item.id);
-    setEditingTextDraft(item.text);
-  }, []);
-
-  const cancelTextEditor = useCallback(() => {
-    setEditingTextId(null);
-    setEditingTextDraft('');
-  }, []);
-
-  const applyTextEditor = useCallback(() => {
-    if (!editingTextId) return;
-    const nextTexts = texts.map((item) =>
-      item.id === editingTextId
-        ? {
-            ...item,
-            text: editingTextDraft.trim() || item.text,
-            height: estimateTextHeight(
-              editingTextDraft.trim() || item.text,
-              item.width,
-              item.textStyle.fontSize,
-              item.textStyle.lineHeight ?? 1.15
-            ),
-          }
-        : item
-    );
-    setTexts(nextTexts);
-    saveToHistory(getDiagramState({ texts: nextTexts }));
-    cancelTextEditor();
-  }, [cancelTextEditor, editingTextDraft, editingTextId, getDiagramState, saveToHistory, setTexts, texts]);
-
-  const openGroupEditor = useCallback((item: GroupBoxType) => {
-    setSelectedGroupBoxes(new Set([item.id]));
-    setSelectedCards(new Set());
-    setSelectedConnections(new Set());
-    setSelectedTexts(new Set());
-    setEditingGroupBoxId(item.id);
-    setEditingGroupDraft(item.title);
-  }, []);
-
-  const cancelGroupEditor = useCallback(() => {
-    setEditingGroupBoxId(null);
-    setEditingGroupDraft('');
-  }, []);
-
-  const applyGroupEditor = useCallback(() => {
-    if (!editingGroupBoxId) return;
-    const nextGroupBoxes = groupBoxes.map((item) =>
-      item.id === editingGroupBoxId ? { ...item, title: editingGroupDraft.trim() || item.title } : item
-    );
-    setGroupBoxes(nextGroupBoxes);
-    saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
-    cancelGroupEditor();
-  }, [cancelGroupEditor, editingGroupBoxId, editingGroupDraft, getDiagramState, groupBoxes, saveToHistory, setGroupBoxes]);
-
-  const commitActiveLooseEditors = useCallback(() => {
-    if (editingTextId) {
-      const nextTexts = texts.map((item) =>
-        item.id === editingTextId
-          ? {
-              ...item,
-              text: editingTextDraft.trim() || item.text,
-              height: estimateTextHeight(
-                editingTextDraft.trim() || item.text,
-                item.width,
-                item.textStyle.fontSize,
-                item.textStyle.lineHeight ?? 1.15
-              ),
-            }
-          : item
-      );
-      setTexts(nextTexts);
-      saveToHistory(getDiagramState({ texts: nextTexts }));
-      setEditingTextId(null);
-      setEditingTextDraft('');
-    }
-
-    if (editingGroupBoxId) {
-      const nextGroupBoxes = groupBoxes.map((item) =>
-        item.id === editingGroupBoxId ? { ...item, title: editingGroupDraft.trim() || item.title } : item
-      );
-      setGroupBoxes(nextGroupBoxes);
-      saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
-      setEditingGroupBoxId(null);
-      setEditingGroupDraft('');
-    }
-  }, [
-    editingGroupBoxId,
-    editingGroupDraft,
-    editingTextDraft,
-    editingTextId,
-    getDiagramState,
-    groupBoxes,
-    saveToHistory,
-    setGroupBoxes,
-    setTexts,
-    texts,
-  ]);
-
-  const applyInlineEditor = useCallback(() => {
-    if (!editingInlineCardId || !inlineDraft) return;
-
-    const nextCards = cards.map((card) =>
-      card.id === editingInlineCardId
-        ? {
-            ...card,
-            title: inlineDraft.title.trim() || card.title,
-            date: inlineDraft.date.trim() || card.date,
-            content: inlineDraft.content.trim() || card.content,
-            label: inlineDraft.label.trim(),
-          }
-        : card
-    );
-
-    setCards(nextCards);
-    saveToHistory(getDiagramState({ cards: nextCards }));
-    cancelInlineEditor();
-  }, [cancelInlineEditor, cards, editingInlineCardId, getDiagramState, inlineDraft, saveToHistory, setCards]);
-
-  useEffect(() => {
-    if (!editingInlineCard) {
-      if (editingInlineCardId) {
-        setEditingInlineCardId(null);
-        setInlineDraft(null);
-      }
-      return;
-    }
-
-    setInlineDraft((current) => {
-      if (!current) {
-        return {
-          title: editingInlineCard.title,
-          date: editingInlineCard.date,
-          content: editingInlineCard.content,
-          label: editingInlineCard.label,
-        };
-      }
-      return current;
-    });
-  }, [editingInlineCard, editingInlineCardId]);
-
-  useEffect(() => {
-    if (!editingInlineCard || !inlineEditorRef.current) return;
-
-    const measure = () => {
-      const nextHeight = inlineEditorRef.current?.offsetHeight;
-      if (nextHeight && nextHeight !== inlineEditorHeight) {
-        setInlineEditorHeight(nextHeight);
-      }
-    };
-
-    measure();
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => measure());
-      observer.observe(inlineEditorRef.current);
-      return () => observer.disconnect();
-    }
-  }, [editingInlineCard, inlineDraft, inlineEditorHeight]);
-
-  const openSelectedCardEditor = useCallback(() => {
-    cancelInlineEditor();
-    cancelTextEditor();
-    cancelGroupEditor();
-
-    if (selectedCards.size === 1) {
-      const id = Array.from(selectedCards)[0];
-      const card = cardMap.get(id);
-      if (card) {
-        setEditingCard(card);
-      }
-      return;
-    }
-
-    if (selectedTexts.size === 1) {
-      const id = Array.from(selectedTexts)[0];
-      const item = texts.find((text) => text.id === id);
-      if (item) openTextEditor(item);
-      return;
-    }
-
-    if (selectedGroupBoxes.size === 1) {
-      const id = Array.from(selectedGroupBoxes)[0];
-      const item = groupBoxes.find((groupBox) => groupBox.id === id);
-      if (item) openGroupEditor(item);
-      return;
-    }
-
-    if (selectedCards.size === 0 && selectedConnections.size === 1) {
-      setEditingConnectionId(Array.from(selectedConnections)[0]);
-    }
-  }, [cancelGroupEditor, cancelInlineEditor, cancelTextEditor, cardMap, groupBoxes, openGroupEditor, openTextEditor, selectedCards, selectedConnections, selectedGroupBoxes, selectedTexts, texts]);
-
   const handleUndo = useCallback(() => {
     const previousState = undo();
     if (!previousState) return;
@@ -1524,88 +962,6 @@ const Diagrama: React.FC = () => {
     texts.length,
   ]);
 
-  // Util: conversÃ£o screen -> world
-  const screenToWorld = useCallback(
-    (clientX: number, clientY: number): Point | null => {
-      const rect = diagramRef.current?.getBoundingClientRect();
-      if (!rect) return null;
-
-      const worldX = (clientX - rect.left - offsetRef.current.x) / scaleRef.current;
-      const worldY = (clientY - rect.top - offsetRef.current.y) / scaleRef.current;
-      return { x: worldX, y: worldY };
-    },
-    []
-  );
-
-  // Util: achar card sob o mouse (world coords)
-  const findCardAtPosition = useCallback(
-    (x: number, y: number): CardType | null => {
-      // percorre na ordem natural; se vocÃª quiser priorizar â€œtopmostâ€, teria que manter zIndex/layer
-      for (const card of cards) {
-        if (x >= card.x && x <= card.x + card.width && y >= card.y && y <= card.y + card.height) {
-          return card;
-        }
-      }
-      return null;
-    },
-    [cards]
-  );
-
-  const getSelectionBox = useCallback((): SelectionBoxType => {
-    return {
-      x: Math.min(dragStart.x, dragEnd.x),
-      y: Math.min(dragStart.y, dragEnd.y),
-      width: Math.abs(dragEnd.x - dragStart.x),
-      height: Math.abs(dragEnd.y - dragStart.y),
-    };
-  }, [dragStart, dragEnd]);
-
-  const isCardInSelection = useCallback((card: CardType, selection: SelectionBoxType): boolean => {
-    return (
-      card.x < selection.x + selection.width &&
-      card.x + card.width > selection.x &&
-      card.y < selection.y + selection.height &&
-      card.y + card.height > selection.y
-    );
-  }, []);
-
-  const isBoxInSelection = useCallback(
-    (
-      item: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      },
-      selection: SelectionBoxType
-    ) =>
-      item.x < selection.x + selection.width &&
-      item.x + item.width > selection.x &&
-      item.y < selection.y + selection.height &&
-      item.y + item.height > selection.y,
-    []
-  );
-
-  const isConnectionInSelection = useCallback(
-    (connection: Connection, selection: SelectionBoxType): boolean => {
-      const fromCard = cardMap.get(connection.fromCard);
-      const toCard = cardMap.get(connection.toCard);
-      if (!fromCard || !toCard) return false;
-
-      return doesConnectionIntersectSelectionBox(
-        fromCard,
-        toCard,
-        selection,
-        {
-          fromSide: connection.fromSide,
-          toSide: connection.toSide,
-        },
-        connection.routeStyle ?? 'bezier'
-      );
-    },
-    [cardMap]
-  );
-
   // SequÃªncia
   const getNextSequenceNumber = useCallback((): number => {
     const usedNumbers = cards.map((c) => c.sequence).sort((a, b) => a - b);
@@ -1617,14 +973,7 @@ const Diagrama: React.FC = () => {
 
   const addCard = useCallback(
     (type: CardTypeEnum = 'default') => {
-      const cW = containerRef.current?.clientWidth || 0;
-      const cH = containerRef.current?.clientHeight || 0;
-
-      // centro da viewport em coords mundo
-      const viewportCenter = {
-        x: (-offsetRef.current.x / scaleRef.current) + cW / (2 * scaleRef.current),
-        y: (-offsetRef.current.y / scaleRef.current) + cH / (2 * scaleRef.current),
-      };
+      const viewportCenter = getViewportCenterWorld();
 
       const nextSequence = getNextSequenceNumber();
       const preset = getCardPreset(type, nextSequence);
@@ -1654,16 +1003,11 @@ const Diagrama: React.FC = () => {
       setCards(nextState.cards);
       saveToHistory(nextState);
     },
-    [cards, getDiagramState, getNextSequenceNumber, saveToHistory, setCards]
+    [cards, getDiagramState, getNextSequenceNumber, getViewportCenterWorld, saveToHistory, setCards]
   );
 
   const addText = useCallback(() => {
-    const cW = containerRef.current?.clientWidth || 0;
-    const cH = containerRef.current?.clientHeight || 0;
-    const viewportCenter = {
-      x: (-offsetRef.current.x / scaleRef.current) + cW / (2 * scaleRef.current),
-      y: (-offsetRef.current.y / scaleRef.current) + cH / (2 * scaleRef.current),
-    };
+    const viewportCenter = getViewportCenterWorld();
 
     const newText: DiagramText = {
       id: `text-${Date.now()}`,
@@ -1686,15 +1030,10 @@ const Diagrama: React.FC = () => {
     setSelectedConnections(new Set());
     setSelectedGroupBoxes(new Set());
     saveToHistory(getDiagramState({ texts: nextTexts }));
-  }, [getDiagramState, saveToHistory, setTexts, texts]);
+  }, [getDiagramState, getViewportCenterWorld, saveToHistory, setTexts, texts]);
 
   const addGroupBox = useCallback(() => {
-    const cW = containerRef.current?.clientWidth || 0;
-    const cH = containerRef.current?.clientHeight || 0;
-    const viewportCenter = {
-      x: (-offsetRef.current.x / scaleRef.current) + cW / (2 * scaleRef.current),
-      y: (-offsetRef.current.y / scaleRef.current) + cH / (2 * scaleRef.current),
-    };
+    const viewportCenter = getViewportCenterWorld();
 
     const accent = '#94A3B8';
     const newGroup: GroupBoxType = {
@@ -1718,14 +1057,7 @@ const Diagrama: React.FC = () => {
     setSelectedConnections(new Set());
     setSelectedTexts(new Set());
     saveToHistory(getDiagramState({ groupBoxes: nextGroupBoxes }));
-  }, [getDiagramState, groupBoxes, saveToHistory, setGroupBoxes]);
-
-  // ConexÃµes
-  const cancelConnection = useCallback(() => {
-    setIsConnecting(false);
-    setConnectionStart(null);
-    setTempConnectionEnd(null);
-  }, []);
+  }, [getDiagramState, getViewportCenterWorld, groupBoxes, saveToHistory, setGroupBoxes]);
 
   const createConnection = useCallback(
     (
@@ -1770,11 +1102,6 @@ const Diagrama: React.FC = () => {
     },
     [cardMap, connectionRouteStyle, connections, getDiagramState, saveToHistory, setConnections]
   );
-
-  const handleConnectionStart = useCallback((cardId: string, side: ConnectionSide, point: Point) => {
-    setIsConnecting(true);
-    setConnectionStart({ cardId, point, side });
-  }, []);
 
   const deleteSelected = useCallback(() => {
     if (
@@ -1919,276 +1246,6 @@ const Diagrama: React.FC = () => {
     texts,
   ]);
 
-  const groupSelectedElements = useCallback(() => {
-    const selectedCount = selectedCards.size + selectedTexts.size + selectedGroupBoxes.size;
-    if (selectedCount < 2) return;
-
-    const groupId = createUniqueId();
-    const nextCards = cards.map((card) =>
-      selectedCards.has(card.id) ? { ...card, groupId } : card
-    );
-    const nextTexts = texts.map((item) =>
-      selectedTexts.has(item.id) ? { ...item, groupId } : item
-    );
-    const nextGroupBoxes = groupBoxes.map((item) =>
-      selectedGroupBoxes.has(item.id) ? { ...item, groupId } : item
-    );
-
-    setCards(nextCards);
-    setTexts(nextTexts);
-    setGroupBoxes(nextGroupBoxes);
-    saveToHistory(
-      getDiagramState({ cards: nextCards, texts: nextTexts, groupBoxes: nextGroupBoxes })
-    );
-  }, [
-    cards,
-    getDiagramState,
-    groupBoxes,
-    saveToHistory,
-    selectedCards,
-    selectedGroupBoxes,
-    selectedTexts,
-    setCards,
-    setGroupBoxes,
-    setTexts,
-    texts,
-  ]);
-
-  const ungroupSelectedElements = useCallback(() => {
-    const expanded = getExpandedSelectionIds({
-      cards: selectedCards,
-      texts: selectedTexts,
-      groupBoxes: selectedGroupBoxes,
-    });
-
-    if (
-      expanded.cardIds.size === 0 &&
-      expanded.textIds.size === 0 &&
-      expanded.groupBoxIds.size === 0
-    ) {
-      return;
-    }
-
-    const nextCards = cards.map((card) =>
-      expanded.cardIds.has(card.id) ? { ...card, groupId: undefined } : card
-    );
-    const nextTexts = texts.map((item) =>
-      expanded.textIds.has(item.id) ? { ...item, groupId: undefined } : item
-    );
-    const nextGroupBoxes = groupBoxes.map((item) =>
-      expanded.groupBoxIds.has(item.id) ? { ...item, groupId: undefined } : item
-    );
-
-    setCards(nextCards);
-    setTexts(nextTexts);
-    setGroupBoxes(nextGroupBoxes);
-    saveToHistory(
-      getDiagramState({ cards: nextCards, texts: nextTexts, groupBoxes: nextGroupBoxes })
-    );
-  }, [
-    cards,
-    getDiagramState,
-    getExpandedSelectionIds,
-    groupBoxes,
-    saveToHistory,
-    selectedCards,
-    selectedGroupBoxes,
-    selectedTexts,
-    setCards,
-    setGroupBoxes,
-    setTexts,
-    texts,
-  ]);
-
-  const alignSelectedElements = useCallback(
-    (direction: 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom') => {
-      const expanded = getExpandedSelectionIds({
-        cards: selectedCards,
-        texts: selectedTexts,
-        groupBoxes: selectedGroupBoxes,
-      });
-
-      const selectedCardItems = cards.filter((card) => expanded.cardIds.has(card.id));
-      const selectedTextItems = texts.filter((item) => expanded.textIds.has(item.id));
-      const selectedGroupItems = groupBoxes.filter((item) => expanded.groupBoxIds.has(item.id));
-
-      const boxes = [
-        ...selectedCardItems.map((item) => ({ id: item.id, kind: 'card' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-        ...selectedTextItems.map((item) => ({ id: item.id, kind: 'text' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-        ...selectedGroupItems.map((item) => ({ id: item.id, kind: 'group' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-      ];
-
-      if (boxes.length < 2) return;
-
-      const left = Math.min(...boxes.map((item) => item.x));
-      const top = Math.min(...boxes.map((item) => item.y));
-      const right = Math.max(...boxes.map((item) => item.x + item.width));
-      const bottom = Math.max(...boxes.map((item) => item.y + item.height));
-      const centerX = (left + right) / 2;
-      const centerY = (top + bottom) / 2;
-
-      const alignX = (x: number, width: number) => {
-        if (direction === 'left') return left;
-        if (direction === 'center-x') return centerX - width / 2;
-        if (direction === 'right') return right - width;
-        return x;
-      };
-
-      const alignY = (y: number, height: number) => {
-        if (direction === 'top') return top;
-        if (direction === 'center-y') return centerY - height / 2;
-        if (direction === 'bottom') return bottom - height;
-        return y;
-      };
-
-      const snapValue = (value: number) =>
-        snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
-
-      const nextCards = cards.map((card) => {
-        if (!expanded.cardIds.has(card.id)) return card;
-        const newX = snapValue(alignX(card.x, card.width));
-        const newY = snapValue(alignY(card.y, card.height));
-        return newX === card.x && newY === card.y ? card : { ...card, x: newX, y: newY };
-      });
-
-      const nextTexts = texts.map((item) => {
-        if (!expanded.textIds.has(item.id)) return item;
-        const newX = snapValue(alignX(item.x, item.width));
-        const newY = snapValue(alignY(item.y, item.height));
-        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
-      });
-
-      const nextGroupBoxes = groupBoxes.map((item) => {
-        if (!expanded.groupBoxIds.has(item.id)) return item;
-        const newX = snapValue(alignX(item.x, item.width));
-        const newY = snapValue(alignY(item.y, item.height));
-        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
-      });
-
-      const nextState = getDiagramState({
-        cards: nextCards,
-        texts: nextTexts,
-        groupBoxes: nextGroupBoxes,
-      });
-
-      setCards(nextState.cards);
-      setTexts(nextState.texts);
-      setGroupBoxes(nextState.groupBoxes);
-      saveToHistory(nextState);
-    },
-    [
-      cards,
-      getDiagramState,
-      getExpandedSelectionIds,
-      groupBoxes,
-      saveToHistory,
-      selectedCards,
-      selectedGroupBoxes,
-      selectedTexts,
-      setCards,
-      setGroupBoxes,
-      setTexts,
-      snapToGrid,
-      texts,
-    ]
-  );
-
-  const distributeSelectedElements = useCallback(
-    (direction: 'horizontal' | 'vertical') => {
-      const expanded = getExpandedSelectionIds({
-        cards: selectedCards,
-        texts: selectedTexts,
-        groupBoxes: selectedGroupBoxes,
-      });
-
-      const boxes = [
-        ...cards
-          .filter((card) => expanded.cardIds.has(card.id))
-          .map((item) => ({ id: item.id, kind: 'card' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-        ...texts
-          .filter((item) => expanded.textIds.has(item.id))
-          .map((item) => ({ id: item.id, kind: 'text' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-        ...groupBoxes
-          .filter((item) => expanded.groupBoxIds.has(item.id))
-          .map((item) => ({ id: item.id, kind: 'group' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
-      ];
-
-      if (boxes.length < 3) return;
-
-      const isHorizontal = direction === 'horizontal';
-      const ordered = boxes
-        .slice()
-        .sort((a, b) => (isHorizontal ? a.x - b.x : a.y - b.y));
-
-      const first = ordered[0];
-      const last = ordered[ordered.length - 1];
-      const startEdge = isHorizontal ? first.x : first.y;
-      const endEdge = isHorizontal ? last.x + last.width : last.y + last.height;
-      const totalSize = ordered.reduce((sum, item) => sum + (isHorizontal ? item.width : item.height), 0);
-      const gap = (endEdge - startEdge - totalSize) / (ordered.length - 1);
-
-      let cursor = startEdge;
-      const positionMap = new Map<string, { x?: number; y?: number }>();
-      ordered.forEach((item) => {
-        positionMap.set(item.id, isHorizontal ? { x: cursor } : { y: cursor });
-        cursor += (isHorizontal ? item.width : item.height) + gap;
-      });
-
-      const snapValue = (value: number) =>
-        snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
-
-      const nextCards = cards.map((card) => {
-        const pos = positionMap.get(card.id);
-        if (!pos) return card;
-        const newX = pos.x !== undefined ? snapValue(pos.x) : card.x;
-        const newY = pos.y !== undefined ? snapValue(pos.y) : card.y;
-        return newX === card.x && newY === card.y ? card : { ...card, x: newX, y: newY };
-      });
-
-      const nextTexts = texts.map((item) => {
-        const pos = positionMap.get(item.id);
-        if (!pos) return item;
-        const newX = pos.x !== undefined ? snapValue(pos.x) : item.x;
-        const newY = pos.y !== undefined ? snapValue(pos.y) : item.y;
-        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
-      });
-
-      const nextGroupBoxes = groupBoxes.map((item) => {
-        const pos = positionMap.get(item.id);
-        if (!pos) return item;
-        const newX = pos.x !== undefined ? snapValue(pos.x) : item.x;
-        const newY = pos.y !== undefined ? snapValue(pos.y) : item.y;
-        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
-      });
-
-      const nextState = getDiagramState({
-        cards: nextCards,
-        texts: nextTexts,
-        groupBoxes: nextGroupBoxes,
-      });
-
-      setCards(nextState.cards);
-      setTexts(nextState.texts);
-      setGroupBoxes(nextState.groupBoxes);
-      saveToHistory(nextState);
-    },
-    [
-      cards,
-      getDiagramState,
-      getExpandedSelectionIds,
-      groupBoxes,
-      saveToHistory,
-      selectedCards,
-      selectedGroupBoxes,
-      selectedTexts,
-      setCards,
-      setGroupBoxes,
-      setTexts,
-      snapToGrid,
-      texts,
-    ]
-  );
-
   const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
     const nextConnections = connections.map((connection) =>
       connection.id === connectionId ? { ...connection, ...updates } : connection
@@ -2261,112 +1318,28 @@ const Diagrama: React.FC = () => {
   const handleFitView = useCallback(() => {
     fitSceneToViewport();
   }, [fitSceneToViewport]);
-  // Atalhos teclado
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement | null;
-      const isTyping =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target?.getAttribute?.('contenteditable') === 'true');
-
-      if (isTyping) return;
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        spacePanPressedRef.current = true;
-      }
-
-      if (e.ctrlKey && e.key === 'a') {
-        e.preventDefault();
-        setSelectedCards(new Set(cards.map((c) => c.id)));
-        setSelectedConnections(new Set());
-        return;
-      }
-
-      if (e.ctrlKey && e.key === 'z') {
-        e.preventDefault();
-        handleUndo();
-        return;
-      }
-
-      if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
-        e.preventDefault();
-        handleRedo();
-        return;
-      }
-
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        handleNewFile();
-        return;
-      }
-
-      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        duplicateSelection();
-        return;
-      }
-
-      if (e.ctrlKey && e.key.toLowerCase() === 'g' && !e.shiftKey) {
-        e.preventDefault();
-        groupSelectedElements();
-        return;
-      }
-
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'g') {
-        e.preventDefault();
-        ungroupSelectedElements();
-        return;
-      }
-
-      if (e.ctrlKey && e.key === 'p') {
-        e.preventDefault();
-        setShowPrintDialog(true);
-        return;
-      }
-
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        handleFitView();
-        return;
-      }
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelected();
-        return;
-      }
-
-      if (e.key === 'Escape' && isConnecting) {
-        cancelConnection();
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent): void => {
-      if (e.code === 'Space') {
-        spacePanPressedRef.current = false;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [
+  useDiagramKeyboardShortcuts({
     cards,
+    connections,
+    texts,
+    groupBoxes,
     cancelConnection,
     deleteSelected,
     duplicateSelection,
     groupSelectedElements,
     handleFitView,
     handleNewFile,
-    isConnecting,
     handleRedo,
     handleUndo,
+    isConnecting,
+    openPrintDialog,
+    setSelectedCards,
+    setSelectedConnections,
+    setSelectedTexts,
+    setSelectedGroupBoxes,
+    spacePanPressedRef,
     ungroupSelectedElements,
-  ]);
+  });
 
   // Wheel zoom (um Ãºnico handler nativo) â€” evita recriar listener e bloqueia scroll do browser
   useEffect(() => {
@@ -2402,7 +1375,7 @@ const Diagrama: React.FC = () => {
 
     el.addEventListener('wheel', handleNativeWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleNativeWheel);
-  }, []);
+  }, [offsetRef, scaleRef, setOffset, setScale]);
 
   // Mouse handlers
   const handleMouseDown = useCallback(
@@ -2449,228 +1422,9 @@ const Diagrama: React.FC = () => {
       setDragStart(world);
       setDragEnd(world);
     },
-    [cancelInlineEditor, commitActiveLooseEditors, isCanvasMoveActive, screenToWorld]
+    [cancelInlineEditor, commitActiveLooseEditors, isCanvasMoveActive, offsetRef, screenToWorld, setDragEnd, setDragStart, setIsDragging]
   );
 
-  const moveDraggedCards = useCallback(
-    (worldX: number, worldY: number): void => {
-      const deltaX = worldX - dragStartRef.current.x;
-      const deltaY = worldY - dragStartRef.current.y;
-
-      if (deltaX !== 0 || deltaY !== 0) {
-        didDragCardsRef.current = true;
-      }
-
-      setCards((prev) =>
-        {
-          let hasChanges = false;
-          const nextCards = prev.map((card) => {
-            const dragged = draggedCardsRef.current.get(card.id);
-            if (!dragged) return card;
-
-            let newX = dragged.startX + deltaX;
-            let newY = dragged.startY + deltaY;
-
-            if (snapToGridRef.current) {
-              newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-              newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
-            }
-
-            if (card.x === newX && card.y === newY) {
-              return card;
-            }
-
-            hasChanges = true;
-            return { ...card, x: newX, y: newY };
-          });
-
-          return hasChanges ? nextCards : prev;
-        }
-      );
-    },
-    [setCards]
-  );
-
-  const flushDraggedCards = useCallback(() => {
-    if (dragFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragFrameRef.current);
-      dragFrameRef.current = null;
-    }
-
-    if (!pendingDragWorldRef.current) return;
-    const pending = pendingDragWorldRef.current;
-    pendingDragWorldRef.current = null;
-    moveDraggedCards(pending.x, pending.y);
-  }, [moveDraggedCards]);
-
-  const scheduleDraggedCards = useCallback(
-    (worldX: number, worldY: number) => {
-      pendingDragWorldRef.current = { x: worldX, y: worldY };
-
-      if (dragFrameRef.current !== null) return;
-
-      dragFrameRef.current = window.requestAnimationFrame(() => {
-        dragFrameRef.current = null;
-        if (!pendingDragWorldRef.current) return;
-        const pending = pendingDragWorldRef.current;
-        pendingDragWorldRef.current = null;
-        moveDraggedCards(pending.x, pending.y);
-      });
-    },
-    [moveDraggedCards]
-  );
-
-  const resizeCard = useCallback(
-    (worldX: number, worldY: number): void => {
-      if (!resizeSession) return;
-
-      const deltaX = worldX - resizeSession.startMouse.x;
-      const deltaY = worldY - resizeSession.startMouse.y;
-      const { startCard, direction } = resizeSession;
-
-      let nextX = startCard.x;
-      let nextY = startCard.y;
-      let nextWidth = startCard.width;
-      let nextHeight = startCard.height;
-
-      if (direction.includes('right')) {
-        nextWidth = Math.max(CARD_MIN_WIDTH, startCard.width + deltaX);
-      }
-
-      if (direction.includes('left')) {
-        nextWidth = Math.max(CARD_MIN_WIDTH, startCard.width - deltaX);
-        nextX = startCard.x + (startCard.width - nextWidth);
-      }
-
-      if (direction.includes('bottom')) {
-        nextHeight = Math.max(CARD_MIN_HEIGHT, startCard.height + deltaY);
-      }
-
-      if (direction.includes('top')) {
-        nextHeight = Math.max(CARD_MIN_HEIGHT, startCard.height - deltaY);
-        nextY = startCard.y + (startCard.height - nextHeight);
-      }
-
-      if (snapToGrid) {
-        nextX = Math.round(nextX / GRID_SIZE) * GRID_SIZE;
-        nextY = Math.round(nextY / GRID_SIZE) * GRID_SIZE;
-        nextWidth = Math.max(CARD_MIN_WIDTH, Math.round(nextWidth / GRID_SIZE) * GRID_SIZE);
-        nextHeight = Math.max(CARD_MIN_HEIGHT, Math.round(nextHeight / GRID_SIZE) * GRID_SIZE);
-      }
-
-      setCards((prev) =>
-        prev.map((card) =>
-          card.id === resizeSession.id
-            ? { ...card, x: nextX, y: nextY, width: nextWidth, height: nextHeight }
-            : card
-        )
-      );
-    },
-    [resizeSession, setCards, snapToGrid]
-  );
-
-  const moveDraggedTexts = useCallback(
-    (worldX: number, worldY: number) => {
-      const deltaX = worldX - dragStartRef.current.x;
-      const deltaY = worldY - dragStartRef.current.y;
-
-      if (deltaX !== 0 || deltaY !== 0) {
-        didDragCardsRef.current = true;
-      }
-
-      setTexts((prev) =>
-        prev.map((item) => {
-          const dragged = draggedTextsRef.current.get(item.id);
-          if (!dragged) return item;
-
-          let newX = dragged.startX + deltaX;
-          let newY = dragged.startY + deltaY;
-
-          if (snapToGridRef.current) {
-            newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-            newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
-          }
-
-          return item.x === newX && item.y === newY ? item : { ...item, x: newX, y: newY };
-        })
-      );
-    },
-    [setTexts]
-  );
-
-  const moveDraggedGroupBoxes = useCallback(
-    (worldX: number, worldY: number) => {
-      const deltaX = worldX - dragStartRef.current.x;
-      const deltaY = worldY - dragStartRef.current.y;
-
-      if (deltaX !== 0 || deltaY !== 0) {
-        didDragCardsRef.current = true;
-      }
-
-      setGroupBoxes((prev) =>
-        prev.map((item) => {
-          const dragged = draggedGroupBoxesRef.current.get(item.id);
-          if (!dragged) return item;
-
-          let newX = dragged.startX + deltaX;
-          let newY = dragged.startY + deltaY;
-
-          if (snapToGridRef.current) {
-            newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-            newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
-          }
-
-          return item.x === newX && item.y === newY ? item : { ...item, x: newX, y: newY };
-        })
-      );
-    },
-    [setGroupBoxes]
-  );
-
-  const resizeBox = useCallback(
-    (
-      session:
-        | { id: string; direction: ResizeDirection; startMouse: Point; startItem: { x: number; y: number; width: number; height: number } }
-        | null,
-      minWidth: number,
-      minHeight: number,
-      apply: (nextX: number, nextY: number, nextWidth: number, nextHeight: number, id: string) => void,
-      worldX: number,
-      worldY: number
-    ) => {
-      if (!session) return;
-
-      const deltaX = worldX - session.startMouse.x;
-      const deltaY = worldY - session.startMouse.y;
-      const { startItem, direction } = session;
-
-      let nextX = startItem.x;
-      let nextY = startItem.y;
-      let nextWidth = startItem.width;
-      let nextHeight = startItem.height;
-
-      if (direction.includes('right')) nextWidth = Math.max(minWidth, startItem.width + deltaX);
-      if (direction.includes('left')) {
-        nextWidth = Math.max(minWidth, startItem.width - deltaX);
-        nextX = startItem.x + (startItem.width - nextWidth);
-      }
-      if (direction.includes('bottom')) nextHeight = Math.max(minHeight, startItem.height + deltaY);
-      if (direction.includes('top')) {
-        nextHeight = Math.max(minHeight, startItem.height - deltaY);
-        nextY = startItem.y + (startItem.height - nextHeight);
-      }
-
-      if (snapToGrid) {
-        nextX = Math.round(nextX / GRID_SIZE) * GRID_SIZE;
-        nextY = Math.round(nextY / GRID_SIZE) * GRID_SIZE;
-        nextWidth = Math.max(minWidth, Math.round(nextWidth / GRID_SIZE) * GRID_SIZE);
-        nextHeight = Math.max(minHeight, Math.round(nextHeight / GRID_SIZE) * GRID_SIZE);
-      }
-
-      apply(nextX, nextY, nextWidth, nextHeight, session.id);
-    },
-    [snapToGrid]
-  );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -2782,6 +1536,8 @@ const Diagrama: React.FC = () => {
       groupResizeSession,
       moveDraggedGroupBoxes,
       moveDraggedTexts,
+      offsetRef,
+      scaleRef,
       scheduleDraggedCards,
       panStart.x,
       panStart.y,
@@ -2789,8 +1545,12 @@ const Diagrama: React.FC = () => {
       resizeCard,
       screenToWorld,
       setGroupBoxes,
+      setOffset,
+      setScale,
       setTexts,
+      setDragEnd,
       textResizeSession,
+      setTempConnectionEnd,
     ]
   );
 
@@ -2810,17 +1570,11 @@ const Diagrama: React.FC = () => {
 
       if (isDraggingCard || isDraggingText || isDraggingGroupBox) {
         flushDraggedCards();
-        setIsDraggingCard(false);
-        setIsDraggingText(false);
-        setIsDraggingGroupBox(false);
-        setDraggedCards(new Map());
-        setDraggedTexts(new Map());
-        setDraggedGroupBoxes(new Map());
         if (didDragCardsRef.current) {
           suppressCardClickRef.current = true;
           saveToHistory();
         }
-        didDragCardsRef.current = false;
+        resetDragState();
         return;
       }
 
@@ -2950,147 +1704,20 @@ const Diagrama: React.FC = () => {
       isResizingText,
       isMiddleZooming,
       isPanning,
+      didDragCardsRef,
       flushDraggedCards,
+      resetDragState,
       saveToHistory,
       screenToWorld,
+      setIsDragging,
+      setGroupResizeSession,
+      setIsResizingCard,
+      setIsResizingGroupBox,
+      setIsResizingText,
+      setResizeSession,
+      setTextResizeSession,
       texts,
     ]
-  );
-
-  const handleCardDragStart = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-
-      const world = screenToWorld(e.clientX, e.clientY);
-      if (!world) return;
-
-      beginExpandedSelectionDrag(
-        selectedCards.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
-          ? {
-              cards: selectedCards,
-              texts: selectedTexts,
-              groupBoxes: selectedGroupBoxes,
-            }
-          : { cards: new Set([id]) },
-        world
-      );
-    },
-    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
-  );
-
-  const handleCardResizeStart = useCallback(
-    (id: string, direction: ResizeDirection, event: React.MouseEvent<HTMLElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-
-      const world = screenToWorld(event.clientX, event.clientY);
-      const card = cardMap.get(id);
-      if (!world || !card) return;
-
-      setSelectedCards(new Set([id]));
-      setSelectedConnections(new Set());
-      setSelectedTexts(new Set());
-      setSelectedGroupBoxes(new Set());
-      setIsResizingCard(true);
-      setResizeSession({
-        id,
-        direction,
-        startMouse: world,
-        startCard: {
-          x: card.x,
-          y: card.y,
-          width: card.width,
-          height: card.height,
-        },
-      });
-    },
-    [cardMap, screenToWorld]
-  );
-
-  const handleTextDragStart = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      const world = screenToWorld(e.clientX, e.clientY);
-      if (!world) return;
-
-      beginExpandedSelectionDrag(
-        selectedTexts.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
-          ? {
-              cards: selectedCards,
-              texts: selectedTexts,
-              groupBoxes: selectedGroupBoxes,
-            }
-          : { texts: new Set([id]) },
-        world
-      );
-    },
-    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
-  );
-
-  const handleTextResizeStart = useCallback(
-    (id: string, direction: ResizeDirection, event: React.MouseEvent<HTMLElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      const world = screenToWorld(event.clientX, event.clientY);
-      const item = texts.find((text) => text.id === id);
-      if (!world || !item) return;
-
-      setSelectedTexts(new Set([id]));
-      setSelectedCards(new Set());
-      setSelectedConnections(new Set());
-      setSelectedGroupBoxes(new Set());
-      setIsResizingText(true);
-      setTextResizeSession({
-        id,
-        direction,
-        startMouse: world,
-        startItem: { x: item.x, y: item.y, width: item.width, height: item.height },
-      });
-    },
-    [screenToWorld, texts]
-  );
-
-  const handleGroupBoxDragStart = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      const world = screenToWorld(e.clientX, e.clientY);
-      if (!world) return;
-
-      beginExpandedSelectionDrag(
-        selectedGroupBoxes.has(id) && (selectedCards.size > 0 || selectedTexts.size > 0 || selectedGroupBoxes.size > 0)
-          ? {
-              cards: selectedCards,
-              texts: selectedTexts,
-              groupBoxes: selectedGroupBoxes,
-            }
-          : { groupBoxes: new Set([id]) },
-        world
-      );
-    },
-    [beginExpandedSelectionDrag, screenToWorld, selectedCards, selectedGroupBoxes, selectedTexts]
-  );
-
-  const handleGroupBoxResizeStart = useCallback(
-    (id: string, direction: ResizeDirection, event: React.MouseEvent<HTMLElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      const world = screenToWorld(event.clientX, event.clientY);
-      const item = groupBoxes.find((groupBox) => groupBox.id === id);
-      if (!world || !item) return;
-
-      setSelectedGroupBoxes(new Set([id]));
-      setSelectedCards(new Set());
-      setSelectedConnections(new Set());
-      setSelectedTexts(new Set());
-      setIsResizingGroupBox(true);
-      setGroupResizeSession({
-        id,
-        direction,
-        startMouse: world,
-        startItem: { x: item.x, y: item.y, width: item.width, height: item.height },
-      });
-    },
-    [groupBoxes, screenToWorld]
   );
 
   // Grid visual
@@ -3231,9 +1858,7 @@ const Diagrama: React.FC = () => {
         scale={scale}
         onZoomIn={() => setScale((s) => clamp(s + 0.1, ZOOM_MIN, ZOOM_MAX))}
         onZoomOut={() => setScale((s) => clamp(s - 0.1, ZOOM_MIN, ZOOM_MAX))}
-        onZoomReset={() => {
-          applyViewportTransform(1, { x: 0, y: 0 });
-        }}
+        onZoomReset={handleZoomReset}
         onFitView={handleFitView}
         isCanvasMoveActive={isCanvasMoveActive}
         onToggleCanvasMove={() => setIsCanvasMoveActive((value) => !value)}
@@ -3292,12 +1917,10 @@ const Diagrama: React.FC = () => {
         }
         if (isDraggingCard) {
           flushDraggedCards();
-          setIsDraggingCard(false);
-          setDraggedCards(new Map());
           if (didDragCardsRef.current) {
             saveToHistory();
           }
-          didDragCardsRef.current = false;
+          resetDragState();
         }
         cancelConnection();
       }}
@@ -3307,21 +1930,12 @@ const Diagrama: React.FC = () => {
         onFileNameChange={setFileName}
           showSaveMenu={showSaveMenu}
           saveMenuRef={saveMenuRef}
-          onToggleSaveMenu={() => setShowSaveMenu((value) => !value)}
+          onToggleSaveMenu={toggleSaveMenu}
           onNewFile={handleNewFile}
-          onSavePng={async () => {
-            await saveAsPng();
-            setShowSaveMenu(false);
-          }}
-          onSaveSvg={async () => {
-            await saveAsSvg();
-            setShowSaveMenu(false);
-          }}
-          onSavePdf={async () => {
-            await saveAsPdf();
-            setShowSaveMenu(false);
-          }}
-          onPrint={() => setShowPrintDialog(true)}
+          onSavePng={handleSavePng}
+          onSaveSvg={handleSaveSvg}
+          onSavePdf={handleSavePdf}
+          onPrint={openPrintDialog}
           canUndo={canUndo}
           canRedo={canRedo}
           onUndo={handleUndo}
@@ -3329,8 +1943,7 @@ const Diagrama: React.FC = () => {
         canEdit={
           selectedCards.size === 1 ||
           selectedTexts.size === 1 ||
-          selectedGroupBoxes.size === 1 ||
-          (selectedCards.size === 0 && selectedConnections.size === 1)
+          selectedGroupBoxes.size === 1
         }
         onEdit={openSelectedCardEditor}
         canDuplicate={
@@ -3474,7 +2087,6 @@ const Diagrama: React.FC = () => {
                     setSelectedCards(new Set());
                     setSelectedTexts(new Set());
                     setSelectedGroupBoxes(new Set());
-                    setEditingConnectionId(conn.id);
                   }}
                 />
               );
@@ -3807,49 +2419,14 @@ const Diagrama: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Dialog de ediÃ§Ã£o */}
-      {editingCard && (
-        <EditCardDialog
-          card={editingCard}
-          onSave={(updated: Partial<CardType> & { id: string }) => {
-            const nextCards = cards.map((card) =>
-              card.id === updated.id ? { ...card, ...updated } : card
-            );
-            setCards(nextCards);
-            saveToHistory(getDiagramState({ cards: nextCards }));
-            setEditingCard(null);
-          }}
-          onClose={() => setEditingCard(null)}
-        />
-      )}
-
-      {editingConnection && (
-        <ConnectionEditDialog
-          open={Boolean(editingConnection)}
-          connection={editingConnection}
-          onClose={() => setEditingConnectionId(null)}
-          onSave={(updates) => {
-            updateConnection(editingConnection.id, updates);
-            setEditingConnectionId(null);
-          }}
-          onInvert={() => invertConnection(editingConnection.id)}
-        />
-      )}
-
       <PrintDialog
         open={showPrintDialog}
         options={printOptions}
         preview={printPreview}
         onChange={setPrintOptions}
-        onClose={() => setShowPrintDialog(false)}
-        onConfirmPdf={async () => {
-          await generatePdf(printOptions);
-          setShowPrintDialog(false);
-        }}
-        onPrint={async () => {
-          await printDocument(printOptions);
-        }}
+        onClose={closePrintDialog}
+        onConfirmPdf={handleConfirmPdf}
+        onPrint={handlePrint}
         canSelection={
           selectedCards.size > 0 ||
           selectedTexts.size > 0 ||

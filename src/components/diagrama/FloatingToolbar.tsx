@@ -612,7 +612,7 @@ export default function FloatingToolbar({
           onClick={runAction(onZoomReset)}
           className="ui-hover-surface flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm"
         >
-          <span>Resetar</span>
+          <span>Zoom 100%</span>
           <span className="font-semibold">{Math.round(scale * 100)}%</span>
         </button>
         <button
