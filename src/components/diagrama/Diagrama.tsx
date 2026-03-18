@@ -9,6 +9,7 @@ import GroupBox from './GroupBox';
 import PropertiesPanel from './PropertiesPanel';
 import {
   doesConnectionIntersectSelectionBox,
+  getConnectionGeometry,
   getClosestSideForPoint,
   getPreviewConnectionGeometry,
   resolveConnectionSides,
@@ -393,6 +394,49 @@ const Diagrama: React.FC = () => {
       ...groupBoxes.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
     ];
 
+    const connectionPadding = 32;
+    for (const connection of connections) {
+      const fromCard = cardMap.get(connection.fromCard);
+      const toCard = cardMap.get(connection.toCard);
+      if (!fromCard || !toCard) continue;
+
+      const geometry = getConnectionGeometry(
+        fromCard,
+        toCard,
+        {
+          fromSide: connection.fromSide,
+          toSide: connection.toSide,
+        },
+        connection.routeStyle ?? 'bezier'
+      );
+
+      const points =
+        connection.routeStyle === 'orthogonal' && 'points' in geometry
+          ? geometry.points
+          : 'controlPoint1' in geometry && 'controlPoint2' in geometry
+          ? [
+              geometry.startPoint,
+              geometry.controlPoint1,
+              geometry.controlPoint2,
+              geometry.endPoint,
+            ]
+          : [geometry.startPoint, geometry.endPoint];
+
+      points.push(geometry.labelPoint);
+
+      const minX = Math.min(...points.map((point) => point.x)) - connectionPadding;
+      const minY = Math.min(...points.map((point) => point.y)) - connectionPadding;
+      const maxX = Math.max(...points.map((point) => point.x)) + connectionPadding;
+      const maxY = Math.max(...points.map((point) => point.y)) + connectionPadding;
+
+      bounds.push({
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      });
+    }
+
     if (!bounds.length) return null;
 
     const minX = Math.min(...bounds.map((item) => item.x));
@@ -401,7 +445,7 @@ const Diagrama: React.FC = () => {
     const maxY = Math.max(...bounds.map((item) => item.y + item.height));
 
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-  }, [cards, groupBoxes, texts]);
+  }, [cardMap, cards, connections, groupBoxes, texts]);
 
   const applyViewportTransform = useCallback((nextScale: number, nextOffset: Point) => {
     scaleRef.current = nextScale;
