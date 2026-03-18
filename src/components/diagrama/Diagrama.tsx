@@ -415,43 +415,68 @@ const Diagrama: React.FC = () => {
     applyViewportTransform(transform.scale, transform.offset);
   }, [applyViewportTransform, getViewportSize]);
 
-  const fitCardsToViewport = useCallback((items: CardType[]) => {
+  const fitSceneToViewport = useCallback(() => {
     const allBounds = getAllElementBounds();
-    if (!allBounds && items.length === 0) return;
+    const totalElementCount = cards.length + texts.length + groupBoxes.length;
+    if (!allBounds || totalElementCount === 0) return;
+    const viewport = getViewportSize();
 
-    if (items.length === 1 && texts.length === 0 && groupBoxes.length === 0) {
-      centerCardInViewport(items[0], 1);
-      return;
+    if (totalElementCount === 1) {
+      if (cards.length === 1) {
+        centerCardInViewport(cards[0], 1);
+        return;
+      }
+
+      const singleBounds =
+        texts.length === 1
+          ? texts[0]
+          : groupBoxes.length === 1
+          ? groupBoxes[0]
+          : null;
+
+      if (singleBounds) {
+        const centerX = singleBounds.x + singleBounds.width / 2;
+        const centerY = singleBounds.y + singleBounds.height / 2;
+        applyViewportTransform(1, {
+          x: viewport.width / 2 - centerX,
+          y: viewport.height / 2 - centerY,
+        });
+        return;
+      }
     }
 
-    const cardsForFit = allBounds
-      ? [{
-          id: '__fit__',
-          x: allBounds.x,
-          y: allBounds.y,
-          width: allBounds.width,
-          height: allBounds.height,
-          sequence: 0,
-          title: '',
-          content: '',
-          label: '',
-          date: '',
-          source: '',
-          accent: '#000000',
-          textStyle: DEFAULT_CARD_TEXT_STYLE,
-          type: 'default' as const,
-        }]
-      : items;
+    const fitProxyCard = [{
+      id: '__fit__',
+      x: allBounds.x,
+      y: allBounds.y,
+      width: allBounds.width,
+      height: allBounds.height,
+      sequence: 0,
+      title: '',
+      content: '',
+      label: '',
+      date: '',
+      source: '',
+      accent: '#000000',
+      textStyle: DEFAULT_CARD_TEXT_STYLE,
+      type: 'default' as const,
+    }];
 
-    const transform = getFitViewportTransform(cardsForFit, getViewportSize(), {
-      margin: VIEWPORT_MARGIN,
+    const viewportMinSide = Math.min(viewport.width, viewport.height);
+    const baseMargin = groupBoxes.length > 0 ? viewportMinSide * 0.08 : VIEWPORT_MARGIN;
+    const adaptiveMargin = Math.round(
+      clamp(baseMargin, groupBoxes.length > 0 ? 56 : 80, groupBoxes.length > 0 ? 104 : 140)
+    );
+
+    const transform = getFitViewportTransform(fitProxyCard, viewport, {
+      margin: adaptiveMargin,
       minScale: ZOOM_MIN,
       maxScale: 1,
     });
     if (!transform) return;
 
     applyViewportTransform(transform.scale, transform.offset);
-  }, [applyViewportTransform, centerCardInViewport, getAllElementBounds, getViewportSize, groupBoxes.length, texts.length]);
+  }, [applyViewportTransform, cards, centerCardInViewport, getAllElementBounds, getViewportSize, groupBoxes, texts]);
 
   const createCardAtPosition = useCallback((
     x: number,
@@ -1336,7 +1361,7 @@ const Diagrama: React.FC = () => {
   useEffect(() => {
     if (hasInitializedViewportRef.current || !containerRef.current) return;
 
-    if (cards.length === 0) {
+    if (cards.length === 0 && texts.length === 0 && groupBoxes.length === 0) {
       const baseScale = 1;
       const baseOffset = { x: 0, y: 0 };
       applyViewportTransform(baseScale, baseOffset);
@@ -1359,18 +1384,20 @@ const Diagrama: React.FC = () => {
       return;
     }
 
-    fitCardsToViewport(cards);
+    fitSceneToViewport();
     hasInitializedViewportRef.current = true;
   }, [
     applyViewportTransform,
     cards,
     createCenteredCard,
-    fitCardsToViewport,
+    fitSceneToViewport,
+    groupBoxes.length,
     pushState,
     setCards,
     setConnections,
     setGroupBoxes,
     setTexts,
+    texts.length,
   ]);
 
   // Util: conversÃ£o screen -> world
@@ -2108,8 +2135,8 @@ const Diagrama: React.FC = () => {
   }, []);
 
   const handleFitView = useCallback(() => {
-    fitCardsToViewport(cards);
-  }, [cards, fitCardsToViewport]);
+    fitSceneToViewport();
+  }, [fitSceneToViewport]);
   // Atalhos teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
