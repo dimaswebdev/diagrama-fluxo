@@ -388,13 +388,30 @@ const Diagrama: React.FC = () => {
   }, []);
 
   const getAllElementBounds = useCallback(() => {
-    const bounds = [
+    const elementBounds = [
       ...cards.map((card) => ({ x: card.x, y: card.y, width: card.width, height: card.height })),
       ...texts.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
       ...groupBoxes.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
     ];
 
+    if (!elementBounds.length) {
+      return null;
+    }
+
+    const baseMinX = Math.min(...elementBounds.map((item) => item.x));
+    const baseMinY = Math.min(...elementBounds.map((item) => item.y));
+    const baseMaxX = Math.max(...elementBounds.map((item) => item.x + item.width));
+    const baseMaxY = Math.max(...elementBounds.map((item) => item.y + item.height));
+    const baseBounds = {
+      x: baseMinX,
+      y: baseMinY,
+      width: baseMaxX - baseMinX,
+      height: baseMaxY - baseMinY,
+    };
+
     const connectionPadding = 32;
+    const connectionBounds: Array<{ x: number; y: number; width: number; height: number }> = [];
+
     for (const connection of connections) {
       const fromCard = cardMap.get(connection.fromCard);
       const toCard = cardMap.get(connection.toCard);
@@ -429,7 +446,7 @@ const Diagrama: React.FC = () => {
       const maxX = Math.max(...points.map((point) => point.x)) + connectionPadding;
       const maxY = Math.max(...points.map((point) => point.y)) + connectionPadding;
 
-      bounds.push({
+      connectionBounds.push({
         x: minX,
         y: minY,
         width: maxX - minX,
@@ -437,12 +454,31 @@ const Diagrama: React.FC = () => {
       });
     }
 
-    if (!bounds.length) return null;
+    if (!connectionBounds.length) {
+      return baseBounds;
+    }
 
-    const minX = Math.min(...bounds.map((item) => item.x));
-    const minY = Math.min(...bounds.map((item) => item.y));
-    const maxX = Math.max(...bounds.map((item) => item.x + item.width));
-    const maxY = Math.max(...bounds.map((item) => item.y + item.height));
+    const connectionMinX = Math.min(...connectionBounds.map((item) => item.x));
+    const connectionMinY = Math.min(...connectionBounds.map((item) => item.y));
+    const connectionMaxX = Math.max(...connectionBounds.map((item) => item.x + item.width));
+    const connectionMaxY = Math.max(...connectionBounds.map((item) => item.y + item.height));
+
+    const hasStructuralGroups = groupBoxes.length > 0;
+    const overflowRatio = hasStructuralGroups ? 0.18 : 0.28;
+    const overflowCap = hasStructuralGroups ? 160 : 220;
+    const maxOverflowX = Math.min(baseBounds.width * overflowRatio, overflowCap);
+    const maxOverflowY = Math.min(baseBounds.height * overflowRatio, overflowCap);
+
+    const minX = Math.min(baseBounds.x, Math.max(connectionMinX, baseBounds.x - maxOverflowX));
+    const minY = Math.min(baseBounds.y, Math.max(connectionMinY, baseBounds.y - maxOverflowY));
+    const maxX = Math.max(
+      baseBounds.x + baseBounds.width,
+      Math.min(connectionMaxX, baseBounds.x + baseBounds.width + maxOverflowX)
+    );
+    const maxY = Math.max(
+      baseBounds.y + baseBounds.height,
+      Math.min(connectionMaxY, baseBounds.y + baseBounds.height + maxOverflowY)
+    );
 
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }, [cardMap, cards, connections, groupBoxes, texts]);
