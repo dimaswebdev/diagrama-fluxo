@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ChevronUp,
   Layers3,
+  LayoutGrid,
   Palette,
   Pipette,
   Route,
@@ -37,7 +38,8 @@ type Selection =
   | { kind: 'card'; item: Card }
   | { kind: 'text'; item: DiagramText }
   | { kind: 'group'; item: GroupBox }
-  | { kind: 'connection'; item: Connection };
+  | { kind: 'connection'; item: Connection }
+  | { kind: 'multi'; item: { id: string; count: number } };
 
 interface PropertiesPanelProps {
   selection: Selection | null;
@@ -56,9 +58,11 @@ interface PropertiesPanelProps {
   onConnectionVariantChange: (value: ConnectionVariant) => void;
   onConnectionStrokeWidthChange: (value: ConnectionStrokeWidth) => void;
   onLayerChange: (direction: 'front' | 'forward' | 'backward' | 'back') => void;
+  onAlign: (direction: 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom') => void;
+  onDistribute: (direction: 'horizontal' | 'vertical') => void;
 }
 
-type SectionId = 'colors' | 'typography' | 'appearance' | 'layers' | 'label' | 'line';
+type SectionId = 'colors' | 'typography' | 'appearance' | 'layers' | 'label' | 'line' | 'arrange';
 
 const STORAGE_KEY = 'diagram-properties-panel-position';
 const PANEL_DOCK_PADDING = 16;
@@ -77,6 +81,7 @@ const sectionLabel: Record<SectionId, string> = {
   layers: 'Camadas',
   label: 'Rótulo',
   line: 'Linha',
+  arrange: 'Alinhar',
 };
 
 const sectionIcon: Record<SectionId, React.ElementType> = {
@@ -86,12 +91,14 @@ const sectionIcon: Record<SectionId, React.ElementType> = {
   layers: Layers3,
   label: Type,
   line: Route,
+  arrange: LayoutGrid,
 };
 
 const getStyle = (selection: Selection | null): TextStyle | null => {
   if (!selection) return null;
   if (selection.kind === 'group') return selection.item.titleStyle;
   if (selection.kind === 'connection') return null;
+  if (selection.kind === 'multi') return null;
   return selection.item.textStyle ?? null;
 };
 
@@ -283,6 +290,53 @@ function AlignButton({
   );
 }
 
+function ArrangeGlyph({ kind }: { kind: 'top' | 'center-y' | 'bottom' | 'distribute-h' | 'distribute-v' }) {
+  if (kind === 'top') {
+    return (
+      <span className="relative h-4 w-4">
+        <span className="absolute left-0 right-0 top-0 h-[1.5px] rounded-full bg-current" />
+        <span className="absolute left-[3px] right-[3px] top-[4px] h-2 rounded-sm border border-current" />
+      </span>
+    );
+  }
+
+  if (kind === 'bottom') {
+    return (
+      <span className="relative h-4 w-4">
+        <span className="absolute left-[3px] right-[3px] top-[2px] h-2 rounded-sm border border-current" />
+        <span className="absolute bottom-0 left-0 right-0 h-[1.5px] rounded-full bg-current" />
+      </span>
+    );
+  }
+
+  if (kind === 'center-y') {
+    return (
+      <span className="relative h-4 w-4">
+        <span className="absolute left-0 right-0 top-1/2 h-[1.5px] -translate-y-1/2 rounded-full bg-current" />
+        <span className="absolute left-[3px] right-[3px] top-[2px] h-[10px] rounded-sm border border-current" />
+      </span>
+    );
+  }
+
+  if (kind === 'distribute-h') {
+    return (
+      <span className="relative h-4 w-4">
+        <span className="absolute left-0 top-[3px] h-2 w-[3px] rounded-sm border border-current" />
+        <span className="absolute left-[6px] top-[3px] h-2 w-[3px] rounded-sm border border-current" />
+        <span className="absolute right-0 top-[3px] h-2 w-[3px] rounded-sm border border-current" />
+      </span>
+    );
+  }
+
+  return (
+    <span className="relative h-4 w-4">
+      <span className="absolute left-[3px] top-0 h-[3px] w-2 rounded-sm border border-current" />
+      <span className="absolute left-[3px] top-[6px] h-[3px] w-2 rounded-sm border border-current" />
+      <span className="absolute left-[3px] bottom-0 h-[3px] w-2 rounded-sm border border-current" />
+    </span>
+  );
+}
+
 export default function PropertiesPanel({
   selection,
   onClose,
@@ -300,6 +354,8 @@ export default function PropertiesPanel({
   onConnectionVariantChange,
   onConnectionStrokeWidthChange,
   onLayerChange,
+  onAlign,
+  onDistribute,
 }: PropertiesPanelProps) {
   const style = useMemo(() => getStyle(selection), [selection]);
   const selectionIdentity = selection ? `${selection.kind}:${selection.item.id}` : null;
@@ -414,10 +470,13 @@ export default function PropertiesPanel({
       ? 'Agrupamento'
       : 'Conexão'
     : '';
+  const resolvedTitle = selection?.kind === 'multi' ? 'Seleção múltipla' : title;
 
   const accent = selection
     ? selection.kind === 'connection'
       ? selection.item.color ?? '#2563EB'
+      : selection.kind === 'multi'
+      ? '#2563EB'
       : selection.item.accent
     : '#2563EB';
 
@@ -426,13 +485,15 @@ export default function PropertiesPanel({
       ? getBackgroundOpacityPercent(selection.item.background)
       : selection.kind === 'group'
       ? getBackgroundOpacityPercent(selection.item.background)
+      : selection.kind === 'multi'
+      ? 0
       : 0
     : 0;
   const showGroupTitle = selection?.kind === 'group' ? selection.item.showTitle ?? true : true;
 
-  const hasTypography = selection ? selection.kind !== 'connection' : false;
+  const hasTypography = selection ? selection.kind !== 'connection' && selection.kind !== 'multi' : false;
   const canAdjustBackground = selection ? selection.kind === 'text' || selection.kind === 'group' : false;
-  const canAdjustLayer = selection ? selection.kind !== 'connection' : false;
+  const canAdjustLayer = selection ? selection.kind !== 'connection' && selection.kind !== 'multi' : false;
   const currentAlign = style?.textAlign ?? 'left';
   const currentFontSize = style?.fontSize ?? 14;
   const currentRotation = selection?.kind === 'text' ? selection.item.rotation ?? 0 : 0;
@@ -444,6 +505,8 @@ export default function PropertiesPanel({
       selection
         ? selection.kind === 'connection'
           ? ['label', 'colors', 'line']
+          : selection.kind === 'multi'
+          ? ['arrange']
           : ['colors', 'typography', ...(canAdjustBackground ? (['appearance'] as SectionId[]) : []), 'layers']
         : [],
     [canAdjustBackground, selection]
@@ -510,6 +573,44 @@ export default function PropertiesPanel({
             swatches={textSwatches}
             onChange={onTextColorChange}
           />
+        </div>
+      );
+    }
+
+    if (activeSection === 'arrange' && selection.kind === 'multi') {
+      return (
+        <div className="rounded-[24px] border border-slate-200/80 bg-white/72 p-4">
+          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Alinhamento</div>
+          <div className="grid grid-cols-3 gap-2">
+            <AlignButton active={false} label="Alinhar à esquerda" onClick={() => onAlign('left')}>
+              <AlignLeft className="h-4 w-4" />
+            </AlignButton>
+            <AlignButton active={false} label="Centralizar na vertical" onClick={() => onAlign('center-y')}>
+              <ArrangeGlyph kind="center-y" />
+            </AlignButton>
+            <AlignButton active={false} label="Alinhar à direita" onClick={() => onAlign('right')}>
+              <AlignRight className="h-4 w-4" />
+            </AlignButton>
+            <AlignButton active={false} label="Alinhar ao topo" onClick={() => onAlign('top')}>
+              <ArrangeGlyph kind="top" />
+            </AlignButton>
+            <AlignButton active={false} label="Centralizar na horizontal" onClick={() => onAlign('center-x')}>
+              <AlignCenter className="h-4 w-4" />
+            </AlignButton>
+            <AlignButton active={false} label="Alinhar à base" onClick={() => onAlign('bottom')}>
+              <ArrangeGlyph kind="bottom" />
+            </AlignButton>
+          </div>
+
+          <div className="mt-4 mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Distribuição</div>
+          <div className="grid grid-cols-2 gap-2">
+            <AlignButton active={false} label="Distribuir horizontalmente" onClick={() => onDistribute('horizontal')}>
+              <ArrangeGlyph kind="distribute-h" />
+            </AlignButton>
+            <AlignButton active={false} label="Distribuir verticalmente" onClick={() => onDistribute('vertical')}>
+              <ArrangeGlyph kind="distribute-v" />
+            </AlignButton>
+          </div>
         </div>
       );
     }
@@ -777,7 +878,7 @@ export default function PropertiesPanel({
             {!isCollapsed && (
               <div className="min-w-0">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-700/55">Propriedades</div>
-                <div className="truncate text-sm font-medium text-slate-700">{title}</div>
+                <div className="truncate text-sm font-medium text-slate-700">{resolvedTitle}</div>
               </div>
             )}
           </div>

@@ -744,6 +744,12 @@ const Diagrama: React.FC = () => {
   );
 
   const propertiesSelection = useMemo(() => {
+    const multiSelectableCount = selectedCards.size + selectedTexts.size + selectedGroupBoxes.size;
+
+    if (multiSelectableCount >= 2) {
+      return { kind: 'multi' as const, item: { id: 'multi-selection', count: multiSelectableCount } };
+    }
+
     if (selectedCards.size === 1) {
       const item = cards.find((card) => card.id === Array.from(selectedCards)[0]);
       return item ? { kind: 'card' as const, item } : null;
@@ -1843,6 +1849,195 @@ const Diagrama: React.FC = () => {
     texts,
   ]);
 
+  const alignSelectedElements = useCallback(
+    (direction: 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom') => {
+      const expanded = getExpandedSelectionIds({
+        cards: selectedCards,
+        texts: selectedTexts,
+        groupBoxes: selectedGroupBoxes,
+      });
+
+      const selectedCardItems = cards.filter((card) => expanded.cardIds.has(card.id));
+      const selectedTextItems = texts.filter((item) => expanded.textIds.has(item.id));
+      const selectedGroupItems = groupBoxes.filter((item) => expanded.groupBoxIds.has(item.id));
+
+      const boxes = [
+        ...selectedCardItems.map((item) => ({ id: item.id, kind: 'card' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+        ...selectedTextItems.map((item) => ({ id: item.id, kind: 'text' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+        ...selectedGroupItems.map((item) => ({ id: item.id, kind: 'group' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+      ];
+
+      if (boxes.length < 2) return;
+
+      const left = Math.min(...boxes.map((item) => item.x));
+      const top = Math.min(...boxes.map((item) => item.y));
+      const right = Math.max(...boxes.map((item) => item.x + item.width));
+      const bottom = Math.max(...boxes.map((item) => item.y + item.height));
+      const centerX = (left + right) / 2;
+      const centerY = (top + bottom) / 2;
+
+      const alignX = (x: number, width: number) => {
+        if (direction === 'left') return left;
+        if (direction === 'center-x') return centerX - width / 2;
+        if (direction === 'right') return right - width;
+        return x;
+      };
+
+      const alignY = (y: number, height: number) => {
+        if (direction === 'top') return top;
+        if (direction === 'center-y') return centerY - height / 2;
+        if (direction === 'bottom') return bottom - height;
+        return y;
+      };
+
+      const snapValue = (value: number) =>
+        snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
+
+      const nextCards = cards.map((card) => {
+        if (!expanded.cardIds.has(card.id)) return card;
+        const newX = snapValue(alignX(card.x, card.width));
+        const newY = snapValue(alignY(card.y, card.height));
+        return newX === card.x && newY === card.y ? card : { ...card, x: newX, y: newY };
+      });
+
+      const nextTexts = texts.map((item) => {
+        if (!expanded.textIds.has(item.id)) return item;
+        const newX = snapValue(alignX(item.x, item.width));
+        const newY = snapValue(alignY(item.y, item.height));
+        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
+      });
+
+      const nextGroupBoxes = groupBoxes.map((item) => {
+        if (!expanded.groupBoxIds.has(item.id)) return item;
+        const newX = snapValue(alignX(item.x, item.width));
+        const newY = snapValue(alignY(item.y, item.height));
+        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
+      });
+
+      const nextState = getDiagramState({
+        cards: nextCards,
+        texts: nextTexts,
+        groupBoxes: nextGroupBoxes,
+      });
+
+      setCards(nextState.cards);
+      setTexts(nextState.texts);
+      setGroupBoxes(nextState.groupBoxes);
+      saveToHistory(nextState);
+    },
+    [
+      cards,
+      getDiagramState,
+      getExpandedSelectionIds,
+      groupBoxes,
+      saveToHistory,
+      selectedCards,
+      selectedGroupBoxes,
+      selectedTexts,
+      setCards,
+      setGroupBoxes,
+      setTexts,
+      snapToGrid,
+      texts,
+    ]
+  );
+
+  const distributeSelectedElements = useCallback(
+    (direction: 'horizontal' | 'vertical') => {
+      const expanded = getExpandedSelectionIds({
+        cards: selectedCards,
+        texts: selectedTexts,
+        groupBoxes: selectedGroupBoxes,
+      });
+
+      const boxes = [
+        ...cards
+          .filter((card) => expanded.cardIds.has(card.id))
+          .map((item) => ({ id: item.id, kind: 'card' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+        ...texts
+          .filter((item) => expanded.textIds.has(item.id))
+          .map((item) => ({ id: item.id, kind: 'text' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+        ...groupBoxes
+          .filter((item) => expanded.groupBoxIds.has(item.id))
+          .map((item) => ({ id: item.id, kind: 'group' as const, x: item.x, y: item.y, width: item.width, height: item.height })),
+      ];
+
+      if (boxes.length < 3) return;
+
+      const isHorizontal = direction === 'horizontal';
+      const ordered = boxes
+        .slice()
+        .sort((a, b) => (isHorizontal ? a.x - b.x : a.y - b.y));
+
+      const first = ordered[0];
+      const last = ordered[ordered.length - 1];
+      const startEdge = isHorizontal ? first.x : first.y;
+      const endEdge = isHorizontal ? last.x + last.width : last.y + last.height;
+      const totalSize = ordered.reduce((sum, item) => sum + (isHorizontal ? item.width : item.height), 0);
+      const gap = (endEdge - startEdge - totalSize) / (ordered.length - 1);
+
+      let cursor = startEdge;
+      const positionMap = new Map<string, { x?: number; y?: number }>();
+      ordered.forEach((item) => {
+        positionMap.set(item.id, isHorizontal ? { x: cursor } : { y: cursor });
+        cursor += (isHorizontal ? item.width : item.height) + gap;
+      });
+
+      const snapValue = (value: number) =>
+        snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
+
+      const nextCards = cards.map((card) => {
+        const pos = positionMap.get(card.id);
+        if (!pos) return card;
+        const newX = pos.x !== undefined ? snapValue(pos.x) : card.x;
+        const newY = pos.y !== undefined ? snapValue(pos.y) : card.y;
+        return newX === card.x && newY === card.y ? card : { ...card, x: newX, y: newY };
+      });
+
+      const nextTexts = texts.map((item) => {
+        const pos = positionMap.get(item.id);
+        if (!pos) return item;
+        const newX = pos.x !== undefined ? snapValue(pos.x) : item.x;
+        const newY = pos.y !== undefined ? snapValue(pos.y) : item.y;
+        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
+      });
+
+      const nextGroupBoxes = groupBoxes.map((item) => {
+        const pos = positionMap.get(item.id);
+        if (!pos) return item;
+        const newX = pos.x !== undefined ? snapValue(pos.x) : item.x;
+        const newY = pos.y !== undefined ? snapValue(pos.y) : item.y;
+        return newX === item.x && newY === item.y ? item : { ...item, x: newX, y: newY };
+      });
+
+      const nextState = getDiagramState({
+        cards: nextCards,
+        texts: nextTexts,
+        groupBoxes: nextGroupBoxes,
+      });
+
+      setCards(nextState.cards);
+      setTexts(nextState.texts);
+      setGroupBoxes(nextState.groupBoxes);
+      saveToHistory(nextState);
+    },
+    [
+      cards,
+      getDiagramState,
+      getExpandedSelectionIds,
+      groupBoxes,
+      saveToHistory,
+      selectedCards,
+      selectedGroupBoxes,
+      selectedTexts,
+      setCards,
+      setGroupBoxes,
+      setTexts,
+      snapToGrid,
+      texts,
+    ]
+  );
+
   const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
     const nextConnections = connections.map((connection) =>
       connection.id === connectionId ? { ...connection, ...updates } : connection
@@ -2915,6 +3110,8 @@ const Diagrama: React.FC = () => {
         onConnectionVariantChange={applyConnectionVariantFromPanel}
         onConnectionStrokeWidthChange={applyConnectionStrokeWidthFromPanel}
         onLayerChange={applyLayerChangeFromPanel}
+        onAlign={alignSelectedElements}
+        onDistribute={distributeSelectedElements}
       />
 
       {/* Ãrea do diagrama */}
